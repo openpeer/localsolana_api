@@ -1,10 +1,12 @@
+// config/config.js
+
 module.exports = {
   development: {
     username: "postgres",
     password: "xxxxx",
     database: "solana_db",
     host: "127.0.0.1",
-    dialect: "postgresql"
+    dialect: "postgres"
   },
   test: {
     username: "root",
