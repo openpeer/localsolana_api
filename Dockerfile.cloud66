@@ -40,7 +40,7 @@ RUN \
 if grep -q "\"build\":" package.json; then \
 if [ -f yarn.lock ]; then yarn run build; \
 elif [ -f package-lock.json ]; then npm run build; \
-elif [ -f pnpm-lock.yaml ]; then pnpm run build; \
+elif [ -f pnpm-lock.yaml]; then pnpm run build; \
 else yarn run build; \
 fi ; \
 fi
