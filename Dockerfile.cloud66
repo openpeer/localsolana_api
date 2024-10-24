@@ -18,7 +18,10 @@ elif [ -f package-lock.json ]; then npm ci; \
 elif [ -f pnpm-lock.yaml ]; then yarn global add pnpm && pnpm i --frozen-lockfile; \
 else yarn install; \
 fi
+
 COPY . .
+COPY config ./config
+
 RUN \
 if grep -q "\"build\":" package.json; then \
 if [ -f yarn.lock ]; then yarn run build; \
