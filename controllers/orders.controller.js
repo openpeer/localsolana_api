@@ -241,6 +241,7 @@ exports.cancelOrder = async (req, res, io) => {
       return errorResponse(res, httpCodes.badReq, "Cancel order is not allowed");
     }
 
+    const updatedOrder = await models.Order.findByPk(order.dataValues.id);
     if (order.dataValues.buyer_id) {
       const buyerChannel = `OrdersChannel_${order.id}_${order.dataValues.buyer_id}`;
       console.log(buyerChannel);
@@ -253,12 +254,10 @@ exports.cancelOrder = async (req, res, io) => {
 
     if (order.dataValues.seller_id) {
       const sellerChannel = `OrdersChannel_${order.id}_${order.dataValues.seller_id}`;
-      console.log(sellerChannel);
-      const updatedOrder = await models.Order.findByPk(order.dataValues.id);
       io.to(sellerChannel).emit('orderUpdate', await fetchedOrderLoop(updatedOrder));
     }
     try{
-    await  new NotificationWorker().perform(NotificationWorker.ORDER_CANCELLED,updatedOrder.dataValues.id);
+    await  new NotificationWorker().perform(NotificationWorker.ORDER_CANCELLED,order.dataValues.id);
     }catch(e){
       console.log("Error in sending notification",e);
     }

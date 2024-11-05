@@ -29,13 +29,13 @@ class NotificationWorker {
         },
       ],
     });
-    const seller = order.seller;
-    const buyer = order.buyer;
-    const winner = order.dispute?.winner;
+    const seller = order.dataValues.seller;
+    const buyer = order.dataValues.buyer;
+    const winner = order.dataValues.dispute?.winner;
 
     if (
       type === NotificationWorker.NEW_ORDER &&
-      (order.list.instant || order.list.buyList)
+      (order.dataValues.list.instant || order.dataValues.list.buyList)
     ) {
       return;
     }
@@ -52,7 +52,7 @@ class NotificationWorker {
         actor = buyer;
         break;
       case NotificationWorker.ORDER_CANCELLED:
-        actor = order.cancelledBy.id === seller.id ? buyer : seller;
+        actor = order.dataValues.cancelledById === seller.id ? buyer : seller;
         break;
       case NotificationWorker.DISPUTE_RESOLVED:
         actor = winner;
@@ -75,9 +75,8 @@ class NotificationWorker {
       ];
     }
 
-    const cancelledBy = order.cancelledBy;
-    console.log("Knock instance:", knock);
-    console.log("Order here", order);
+    const cancelledBy = order.dataValues.cancelledById === seller.id ? buyer : seller;
+    console.log("Triggered workflow", type,recipients);
     await knock.workflows.trigger(type, {
       actor: actorProfile,
       recipients: recipients,
@@ -88,17 +87,17 @@ class NotificationWorker {
         cancelledBy: cancelledBy
           ? cancelledBy.name || this.smallWalletAddress(cancelledBy.address)
           : null,
-        tokenAmount: order.tokenAmount?.toString(),
-        fiatAmount: order.fiatAmount?.toString(),
-        token: order.list.token.symbol,
-        fiat: order.list.fiat_currencies.code,
-        price: order.price.toString(),
-        url: `${process.env.FRONTEND_URL}/orders/${order.uuid}`,
-        uuid: this.smallWalletAddress(order.uuid, 6),
+        tokenAmount: order.dataValues.tokenAmount?.toString(),
+        fiatAmount: order.dataValues.fiatAmount?.toString(),
+        token: order.dataValues.list.token.symbol,
+        fiat: order.dataValues.list.fiat_currencies.code,
+        price: order.dataValues.price.toString(),
+        url: `${process.env.FRONTEND_URL}/orders/${order.dataValues.id}`,
+        uuid: this.smallWalletAddress(order.dataValues.uuid, 6),
         winner: winner
           ? winner.name || this.smallWalletAddress(winner.address)
           : null,
-        paymentMethod: order.paymentMethod?.bank.name,
+        paymentMethod: order.dataValues.paymentMethod?.bank.name,
       },
     });
   }

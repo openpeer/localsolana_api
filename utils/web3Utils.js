@@ -61,7 +61,7 @@ exports.startListeningSolanaEvents = function (io) {
           break;
         case "DisputeResolved":
           status = 2;
-          notificationType = NotificationWorker.DISPUTE_RESOLVED;
+          notificationType = NotificationWorker.DISPUTE_RESOLVED; 
           break; 
         default:
           break;
