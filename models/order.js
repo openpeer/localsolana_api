@@ -17,6 +17,7 @@ module.exports = (sequelize, DataTypes) => {
        Order.belongsTo(models.user, { as: 'seller', foreignKey: 'seller_id' });
         // Association with list model as list
        Order.belongsTo(models.lists,{ as: 'list', foreignKey: 'list_id'});
+       Order.belongsTo(models.user, { as: 'cancelledBy', foreignKey: 'cancelled_by_id' });
     }
   }
   Order.init({

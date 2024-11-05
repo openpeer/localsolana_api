@@ -1,3 +1,4 @@
+require('dotenv').config()
 const { Connection, PublicKey } = require("@solana/web3.js");
 const coder = require("@coral-xyz/anchor/dist/cjs/coder");
 const idl = require("../idl/local_solana_migrate.json");
@@ -8,9 +9,9 @@ const NotificationWorker = require("../workers/notificationWorker");
 
 
 exports.startListeningSolanaEvents = function (io) {
-  const connection = new Connection("https://api.devnet.solana.com");
+  const connection = new Connection(`${process.env.SOLANA_RPC_URL}`);
   const programId = new PublicKey(
-    "1w3ekpHrruiEJPYKpQH6rQssTRNKCKiqUjfQeJXTTrX"
+   `${process.env.LOCALSOLANA_PROGRAM_ID}`
   );
   console.log("Here server is listening solana program events:");
   // Create a coder instance from your IDL
