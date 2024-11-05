@@ -68,7 +68,7 @@ class NotificationWorker {
      console.log('Actor is ',actor);
     let recipients = [actorProfile];
 
-    if (order.dispute || type === NotificationWorker.DISPUTE_RESOLVED) {
+    if (order.dispute || type === NotificationWorker.DISPUTE_RESOLVED) { 
       recipients = [
         { id: seller.address, name: seller.name, email: seller.email },
         { id: buyer.address, name: buyer.name, email: buyer.email },
