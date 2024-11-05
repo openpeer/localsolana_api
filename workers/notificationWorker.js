@@ -19,6 +19,7 @@ class NotificationWorker {
       include: [
         { model: models.user, as: "buyer" }, // Fetches the associated buyer
         { model: models.user, as: "seller" }, // Fetches the associated seller
+        { model: models.user, as: "cancelledBy" },
         {
           model: models.lists,
           as: "list",
@@ -75,7 +76,7 @@ class NotificationWorker {
       ];
     }
 
-    const cancelledBy = order.dataValues.cancelledById === seller.id ? buyer : seller;
+    const cancelledBy = order.dataValues.cancelledBy;
     console.log("Triggered workflow", type,recipients);
     await knock.workflows.trigger(type, {
       actor: actorProfile,
@@ -84,20 +85,21 @@ class NotificationWorker {
         username: actor?.name || this.smallWalletAddress(actor?.address || ""),
         seller: seller.name || this.smallWalletAddress(seller.address),
         buyer: buyer.name || this.smallWalletAddress(buyer.address),
-        cancelledBy: cancelledBy
+        cancelled_by: cancelledBy
           ? cancelledBy.name || this.smallWalletAddress(cancelledBy.address)
           : null,
-        tokenAmount: order.dataValues.tokenAmount?.toString(),
-        fiatAmount: order.dataValues.fiatAmount?.toString(),
+          token_amount: order.dataValues.tokenAmount?.toString(),
+        fiat_amount: order.dataValues.fiatAmount?.toString(),
         token: order.dataValues.list.token.symbol,
         fiat: order.dataValues.list.fiat_currencies.code,
         price: order.dataValues.price.toString(),
         url: `${process.env.FRONTEND_URL}/orders/${order.dataValues.id}`,
-        uuid: this.smallWalletAddress(order.dataValues.uuid, 6),
+        uuid: this.smallWalletAddress(order.dataValues.trade_id, 6),
         winner: winner
           ? winner.name || this.smallWalletAddress(winner.address)
           : null,
-        paymentMethod: order.dataValues.paymentMethod?.bank.name,
+          payment_method: order.dataValues.paymentMethod?.bank.name,
+          order_number: order.dataValues.id,
       },
     });
   }
