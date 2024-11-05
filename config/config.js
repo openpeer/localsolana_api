@@ -3,9 +3,9 @@ require('dotenv').config();
 module.exports = {
     development: {
       username: "postgres",
-      password: "IpEQ5lEF5EQiWo",
-      database: "solana_db",
-      host: "64.227.143.219",
+      password: "xxxx",
+      database: "db_name",
+      host: "xx.xx.xx.xx",
       dialect: "postgres"
     },
     test: {
