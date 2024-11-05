@@ -1,0 +1,91 @@
+FROM node:18
+
+# Your ENV vars are automatically injected here as ARGS
+ARG NODE_ENV="$NODE_ENV"
+ARG DB_USERNAME
+ARG DB_PASSWORD
+ARG DB_NAME
+ARG DB_HOST
+ARG DB_DIALECT
+
+# Set environment variables
+ENV NODE_ENV=$NODE_ENV \
+    DB_USERNAME=$DB_USERNAME \
+    DB_PASSWORD=$DB_PASSWORD \
+    DB_NAME=$DB_NAME \
+    DB_HOST=$DB_HOST \
+    DB_DIALECT=$DB_DIALECT
+
+# Validate required environment variables
+RUN echo "Validating environment variables..." && \
+    [ -n "$DB_USERNAME" ] || (echo "DB_USERNAME is required" && exit 1) && \
+    [ -n "$DB_PASSWORD" ] || (echo "DB_PASSWORD is required" && exit 1) && \
+    [ -n "$DB_NAME" ] || (echo "DB_NAME is required" && exit 1) && \
+    [ -n "$DB_HOST" ] || (echo "DB_HOST is required" && exit 1) && \
+    [ -n "$DB_DIALECT" ] || (echo "DB_DIALECT is required" && exit 1) && \
+    echo "All required environment variables are set"
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update -y && \
+    apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
+    curl \
+    zip \
+    libvips-dev \
+    libvips-tools && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy package files
+COPY package*.json yarn*.lock pnpm*.yaml ./
+
+# Install dependencies
+RUN if [ -f yarn.lock ]; then \
+        echo "Installing dependencies with yarn..." && \
+        yarn --frozen-lockfile install; \
+    elif [ -f package-lock.json ]; then \
+        echo "Installing dependencies with npm..." && \
+        npm ci; \
+    elif [ -f pnpm-lock.yaml ]; then \
+        echo "Installing dependencies with pnpm..." && \
+        yarn global add pnpm && \
+        pnpm i --frozen-lockfile; \
+    else \
+        echo "Installing dependencies with yarn (no lockfile)..." && \
+        yarn install; \
+    fi
+
+# Copy application code
+COPY . .
+COPY config ./config
+
+# Build if necessary
+RUN if grep -q "\"build\":" package.json; then \
+        if [ -f yarn.lock ]; then \
+            echo "Building with yarn..." && \
+            yarn run build; \
+        elif [ -f package-lock.json ]; then \
+            echo "Building with npm..." && \
+            npm run build; \
+        elif [ -f pnpm-lock.yaml ]; then \
+            echo "Building with pnpm..." && \
+            pnpm run build; \
+        else \
+            echo "Building with yarn..." && \
+            yarn run build; \
+        fi; \
+    fi
+
+# Add debugging output for environment variables
+RUN echo "Final environment configuration:" && \
+    echo "NODE_ENV: $NODE_ENV" && \
+    echo "DB_HOST: $DB_HOST" && \
+    echo "DB_NAME: $DB_NAME" && \
+    echo "DB_USERNAME: $DB_USERNAME" && \
+    echo "DB_DIALECT: $DB_DIALECT" && \
+    echo "DB_PASSWORD: [HIDDEN]"
+
+# Start the application
+CMD ["yarn", "start"]

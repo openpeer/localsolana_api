@@ -1,9 +1,22 @@
+// config/database.js
+
+require('dotenv').config();
+
 const Promise = require('promise');
 const { Client } = require('pg');
 const { Sequelize } = require("sequelize");
-require('dotenv').config();
 
 
+// const connectionString = process.env.DATABASE_URL;
+
+// const dbConfig = {
+//     user:  "postgres",
+//     host: "localhost",
+//     database: "postgres",
+//     password: "admin",
+//     port:5432,
+//   };
+//   const client = new Client(dbConfig);
 
 console.log('Database Config:', {
   name: process.env.DB_NAME,
