@@ -1,0 +1,23 @@
+{
+  "development": {
+    "username": "postgres",
+    "password": "IpEQ5lEF5EQiWo",
+    "database": "solana_db",
+    "host": "64.227.143.219",
+    "dialect": "postgresql"
+  },
+  "test": {
+    "username": "root",
+    "password": null,
+    "database": "database_test",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  },
+  "production": {
+    "username": "root",
+    "password": null,
+    "database": "database_production",
+    "host": "127.0.0.1",
+    "dialect": "mysql"
+  }
+}
