@@ -1,13 +1,12 @@
 require('dotenv').config();
 const fs = require('fs');
-const port = process.env.PORT || 8081;
+const port = process.env.PORT || 3000;
 const express = require('express');
 const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
 const expressSession = require('express-session');
 const http = require('http');
 const https = require('https');
-const { startListeningSolanaEvents,getTradeId } = require("./utils/web3Utils");
 
 // Initialize express app
 const app = express();
@@ -51,7 +50,7 @@ const startServer = async () => {
   const io = socketIo(server);
   const setupSocketHandlers = require('./api/routes/socket.route');
   setupSocketHandlers(io);
-  startListeningSolanaEvents(io); 
+
   // Middleware
   app.use(express.json());
   app.set('view engine', 'pug');
