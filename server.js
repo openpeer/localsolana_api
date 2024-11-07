@@ -8,6 +8,7 @@ const expressSession = require('express-session');
 const http = require('http');
 const https = require('https');
 const { startListeningSolanaEvents } = require("./utils/web3Utils");
+const { automaticOrderCancellationCron } = require("./controllers/orders.controller");
 
 // Initialize express app
 const app = express();
@@ -53,6 +54,8 @@ const startServer = async () => {
   setupSocketHandlers(io);
   //as soon as the server starts, start listening for our program events.
   startListeningSolanaEvents(io);
+  //start cron every minute for automatic cancellation
+  automaticOrderCancellationCron();
 
   // Middleware
   app.use(express.json());

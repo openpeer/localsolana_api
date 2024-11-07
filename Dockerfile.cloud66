@@ -14,7 +14,10 @@ ENV NODE_ENV=$NODE_ENV \
     DB_PASSWORD=$DB_PASSWORD \
     DB_NAME=$DB_NAME \
     DB_HOST=$DB_HOST \
-    DB_DIALECT=$DB_DIALECT
+    DB_DIALECT=$DB_DIALECT \
+    KNOCK_API_KEY=$KNOCK_API_KEY \
+    SOLANA_RPC_URL=$SOLANA_RPC_URL \
+    FRONTEND_URL=$FRONTEND_URL
 
 # Validate required environment variables
 RUN echo "Validating environment variables..." && \
