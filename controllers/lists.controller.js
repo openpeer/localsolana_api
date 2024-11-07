@@ -10,7 +10,7 @@ const { sequelize } = require('../models');
 const { QueryTypes, where, and } = require('sequelize');
 const { min } = require("moment");
 const { Op } = require('sequelize');
-
+ 
 // method for adding the fiat currencies
 exports.createList = async function(req, res){
     try {
