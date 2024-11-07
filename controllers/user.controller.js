@@ -115,16 +115,17 @@ exports.updateUser =  async (req, res) => {
     if (!user) {
       return errorResponse(res, httpCodes.badReq,Messages.usernotFound);
     }
-     await models.user.update({ ...req.body },{
+    const [affectedRows, [updatedUser]]= await models.user.update({ ...req.body },{
       where: {
-        address: address
-      },  
+        address: address,
+      },
+      returning: true  
     });
-      console.log("user", user);
+      console.log("user", updatedUser);
       if(req.body.email && req.body.name){
         await identifyUser(user.address,{name:req.body.name,email:req.body.email});
       }
-    return successResponse(res, Messages.userUpdated, user);
+    return successResponse(res, Messages.userUpdated, updatedUser);
   } catch (error) {
     console.error(error);
     return errorResponse(res, httpCodes.serverError,Messages.systemError);
