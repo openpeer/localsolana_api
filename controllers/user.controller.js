@@ -29,6 +29,11 @@ module.exports.createUser = async (req, res) => {
       available_to: req.body.available_to,
       weeekend_offline: req.body.weeekend_offline,
       contract_address: req.body.contract_address,
+      telegram_user_id: req.body.telegram_user_id,
+      telegram_username: req.body.telegram_username,
+      whatsapp_country_code: req.body.whatsapp_country_code,
+      whatsapp_number: req.body.whatsapp_number,
+      unique_identifier: req.body.unique_identifier,
     };
     const userAlreadyCreated = await models.user.findOne({
       where: {
@@ -99,6 +104,11 @@ exports.getUser = async (req, res) => {
         timezone: "",
         weeekend_offline: false,
         contract_address: null,
+        telegram_user_id: null,
+        telegram_username: null,
+        whatsapp_country_code: null,
+        whatsapp_number: null,
+        unique_identifier: null,
       };
       let data = await models.user.create(newUser);
       // Step 2: Generate LocalSolanaAccount
