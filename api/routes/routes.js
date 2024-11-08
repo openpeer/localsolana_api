@@ -12,6 +12,7 @@ const bankController = require('../../controllers/banks.controller');
 const paymentMethods = require('../../controllers/paymentMethods.controller');
 const pricesController = require('../../controllers/prices.controller');
 const quickBuyController = require('../../controllers/quickBuy.controller');
+const telegramController = require('../../controllers/telegram.controller');
 const { authenticateToken } = require('../../middlewares/auth.middleware'); // Correct import
 
 const createRouter = (io) => {
@@ -95,6 +96,9 @@ const createRouter = (io) => {
 
     //Routes for transaction
     router.post('/transaction',authenticateToken,  ordersController.handleTransaction);
+
+    // Telegram webhook
+    router.post('/telegram/webhook', telegramController.webhook);
 
     router.get('/testingCron', ordersController.testingCronJob);
     return router;

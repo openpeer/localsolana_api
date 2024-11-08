@@ -67,11 +67,11 @@ const startServer = async () => {
   });
 
   // Define the home route
-  app.get('/', (req, res) => {
-    res.render('index', {
-      name: 'Ductn'
-    });
-  });
+  // app.get('/', (req, res) => {
+  //   res.render('index', {
+  //     name: 'Ductn'
+  //   });
+  // });
 
   // Use API routes
   const createRouter = require('./api/routes/routes');
