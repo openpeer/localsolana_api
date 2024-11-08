@@ -1,3 +1,4 @@
+const { v4: uuidv4 } = require('uuid');
 const models = require("../models/index");
 const { errorResponse, successResponse } = require("../utils/rest");
 const Messages = require("../utils/messages");
@@ -33,7 +34,7 @@ module.exports.createUser = async (req, res) => {
       telegram_username: req.body.telegram_username,
       whatsapp_country_code: req.body.whatsapp_country_code,
       whatsapp_number: req.body.whatsapp_number,
-      unique_identifier: req.body.unique_identifier,
+      unique_identifier: uuidv4(),
     };
     const userAlreadyCreated = await models.user.findOne({
       where: {
@@ -108,7 +109,7 @@ exports.getUser = async (req, res) => {
         telegram_username: null,
         whatsapp_country_code: null,
         whatsapp_number: null,
-        unique_identifier: null,
+        unique_identifier: uuidv4(),
       };
       let data = await models.user.create(newUser);
       // Step 2: Generate LocalSolanaAccount
