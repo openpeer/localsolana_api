@@ -243,9 +243,11 @@ exports.getAllLists =  async (req, res) => {
     const { id } = req.params;
     const { chain_id, seller_id, token_id, fiat_currency_id, total_available_amount, limit_min, limit_max, 
       margin_type, margin, terms, automatic_approval, status, payment_method_id, type, bank_id, deposit_time_limit,
-      payment_time_limit, accept_only_verified, escrow_type, price_source, price
+      payment_time_limit, accept_only_verified, escrow_type, price_source, price, payment_methods
      } = req.body;
+    const {user}=req;
     try {
+      
       const fetchedList = await models.lists.findByPk(id);
       if (!fetchedList) {
         return errorResponse(res, httpCodes.badReq,Messages.listNotFound);
@@ -271,6 +273,123 @@ exports.getAllLists =  async (req, res) => {
       fetchedList.escrow_type = escrow_type,
       fetchedList.price_source = price_source,
       fetchedList.price = price
+      
+      bankIds = req.body.bank_ids;
+      
+      if (type==='BuyList' && bankIds.length > 0) {
+        // First, get all existing bank IDs for this list
+        const existingEntries = await sequelize.query(
+          `SELECT bank_id FROM "lists_banks" 
+           WHERE list_id = ${id}`,
+          {
+            type: QueryTypes.SELECT
+          }
+        );
+        
+        const existingBankIds = existingEntries.map(entry => entry.bank_id);
+        
+        // Delete entries that are not in the new bankIds
+        await sequelize.query(
+          `DELETE FROM "lists_banks" 
+           WHERE list_id = :listId 
+           AND bank_id NOT IN (:bankIds)`,
+          {
+            replacements: { 
+              listId: id,
+              bankIds: existingBankIds.join(",")
+            },
+            type: QueryTypes.DELETE
+          }
+        );
+        
+        const list_id=id;
+        // Insert new entries that don't exist yet
+        for (let value of bankIds) {
+          await sequelize.query(
+            `INSERT INTO "lists_banks" ("list_id", "bank_id")
+             VALUES (:listId, :bankId)
+             ON CONFLICT ("list_id", "bank_id") DO NOTHING`,
+            {
+              replacements: {
+                listId: list_id,
+                bankId: value.id
+              },
+              type: QueryTypes.INSERT
+            }
+          );
+        }
+      }
+      else if(type==='SellList' && payment_methods.length > 0){
+        
+          const list_id=id;
+          // First, get all existing payment method IDs for this list
+          const existingPaymentMethodIds = await models.lists_payment_methods.findAll({
+            where:{
+              list_id:list_id
+            },
+            attributes:['list_id','payment_method_id']
+          });
+
+          const deletedValues = await models.lists_payment_methods.destroy({
+            where: {
+              payment_method_id: existingPaymentMethodIds.map((data)=>data.payment_method_id) ,
+              list_id:list_id
+            }
+          });
+
+          payment_methods.forEach(async (params) => {
+            
+            const result=await models.payment_methods.findOne({
+              where:{
+                user_id:user.id,
+                bank_id:params.bank_id
+              }
+            });
+
+            let payment_method_id=0;
+            if(!result){
+               const payment_method_created=models.payment_methods.create([
+                {
+                  user_id:user.id,
+                  bank_id:params.bank_id,
+                  values:params.values,
+                  type:'ListPaymentMethod'
+                }
+              ]);
+              payment_method_id=payment_method_created.dataValues.id;
+            }else{
+              payment_method_id=result.dataValues.id;
+  
+              await models.payment_methods.update({
+                values:params.values},{
+                where:{
+                  user_id:user.id,
+                  bank_id:params.bank_id
+                }
+              });
+            }
+
+            const check_existence_in_list_payment_methods = await models.lists_payment_methods.findOne({
+              where:{
+                list_id:list_id,
+                payment_method_id:payment_method_id
+              },
+              attributes:['list_id','payment_method_id']
+            });
+
+            if(!check_existence_in_list_payment_methods){
+              const result1 = await sequelize.query(
+                `INSERT INTO "lists_payment_methods" ("list_id", "payment_method_id")
+                VALUES (${list_id}, ${payment_method_id})
+                `,
+                {
+                  type: QueryTypes.INSERT
+                });
+              // console.log(result1);
+            }
+          });
+      }
+
       let updatedList = await fetchedList.save();
       return successResponse(res, Messages.updatedList, updatedList);
     } catch (error) {

@@ -295,11 +295,12 @@ exports.createOrder = async function (req, res) {
     } else {
       bankID = payment_method.bank.id;
     }
+    const payment_method_details=await models.payment_methods.findByPk(payment_method?.id);
     let paymentMethodData = {
       user_id: user.dataValues.id,
       bank_id: bankID,
       type: 'OrderPaymentMethod',
-      values: payment_method.values
+      values: (payment_method.values)?payment_method.values:payment_method_details?.values
     }
     const paymentMethod = await models.payment_methods.create(paymentMethodData);
     console.log("paymentMethod", paymentMethod);

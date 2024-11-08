@@ -1806,6 +1806,24 @@ export type LocalSolanaMigrate = {
         {
           "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "mintAccount"
+        },
+        {
+          "name": "escrowStateTokenAccount",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "sellerTokenAccount",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "feePayer",
+          "writable": true,
+          "signer": true
         }
       ],
       "args": [
