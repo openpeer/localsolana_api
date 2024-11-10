@@ -40,7 +40,24 @@ module.exports = (sequelize, DataTypes) => {
     updatedAt: {
       type: DataTypes.DATE,
       field: 'updated_at' // Maps to the database column 'updated_at'
-    }
+    },
+    telegram_user_id: {
+      type: DataTypes.BIGINT,
+      unique: true,
+    },
+    telegram_username: {
+      type: DataTypes.STRING,
+    },
+    whatsapp_country_code: {
+      type: DataTypes.STRING,
+    },
+    whatsapp_number: {
+      type: DataTypes.STRING,
+    },
+    unique_identifier: {
+      type: DataTypes.STRING,
+      unique: true,
+    },
   }, {
     sequelize,
     modelName: 'user',

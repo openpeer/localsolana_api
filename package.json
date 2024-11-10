@@ -39,6 +39,7 @@
     "node-cron": "^3.0.3",
     "node-fetch": "^2.7.0",
     "node-localstorage": "^2.1.5",
+    "node-telegram-bot-api": "^0.66.0",
     "pg": "^8.13.1",
     "promise": "^8.1.0",
     "pug": "^3.0.1",
@@ -47,6 +48,7 @@
     "sequelize-cli": "^6.6.2",
     "socket.io": "^4.7.5",
     "tar": "^7.4.0",
+    "uuid": "^11.0.2",
     "ws": "^8.18.0"
   },
   "devDependencies": {
