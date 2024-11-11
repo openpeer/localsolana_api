@@ -155,8 +155,11 @@ exports.updateUser = async (req, res) => {
     if (!user) {
       return errorResponse(res, httpCodes.badReq, Messages.usernotFound);
     }
+
+    const { user_profile } = req.body; // Extract user_profile from req.body
+
     const [affectedRows, [updatedUser]] = await models.user.update(
-      { ...req.body },
+      { ...user_profile }, // Spread user_profile instead of req.body
       {
         where: {
           address: address,
@@ -165,10 +168,10 @@ exports.updateUser = async (req, res) => {
       }
     );
     console.log("user", updatedUser);
-    if (req.body.email && req.body.name) {
+    if (user_profile.email && user_profile.name) {
       await identifyUser(user.address, {
-        name: req.body.name,
-        email: req.body.email,
+        name: user_profile.name,
+        email: user_profile.email,
       });
     }
     return successResponse(res, Messages.userUpdated, updatedUser);

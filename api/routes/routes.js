@@ -30,6 +30,7 @@ const createRouter = (io) => {
     router.get('/usersCount', userController.getUsersCount);
     router.get('/getUsers', userController.getAllUsers);
     router.get('/user_profiles/:address', userController.getUser);
+    router.patch('/user_profiles/:address', userController.updateUser);
     router.post('/user_profiles/:address', userController.updateUser);
     router.post('/login', loginController.login);
     router.get('/getParticularUser/:id', userController.getParticularUser);
