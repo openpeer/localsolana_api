@@ -70,7 +70,7 @@ const createRouter = (io) => {
     router.get('/getLists', listController.getAllLists);
     router.get('/lists/:id', listController.getList);
     router.get('/getListsCount', listController.getListsCount);
-    router.put('/list_management/:id', listController.updateList);
+    router.put('/list_management/:id',authenticateToken, (req, res) =>listController.updateList(req, res));
     router.delete('/list_management/:id', listController.deleteList);
     router.get('/lists', listController.fetchListForParticularUser);
 

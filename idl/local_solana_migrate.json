@@ -1800,6 +1800,24 @@
         {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "mint_account"
+        },
+        {
+          "name": "escrow_state_token_account",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "seller_token_account",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "fee_payer",
+          "writable": true,
+          "signer": true
         }
       ],
       "args": [
