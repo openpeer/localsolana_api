@@ -4,7 +4,7 @@ const { successResponse, errorResponse } = require('../utils/rest');
 const Messages = require('../utils/messages');
 const httpCodes = require('../utils/httpCodes');
 
-const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { webHook: true });
 
 exports.webhook = async (req, res) => {
   console.log("Received webhook request with params:", req.body);
