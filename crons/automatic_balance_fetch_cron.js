@@ -217,7 +217,7 @@ const { Op } = require("sequelize"); // Import Op for Sequelize operations
   }
 
   // Schedule the CRON job to run every 10 minutes
-  cron.schedule("*/2 * * * *", () => {
+  cron.schedule("*/10 * * * *", () => {
     console.log("Running CRON job to update Solana wallet balances...");
     updateWalletBalances();
   });
