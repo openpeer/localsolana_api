@@ -9,51 +9,6 @@ const models = require("../models"); // Import your models for database access
   // Initialize Solana connection (use mainnet-beta or the network you're using)
   const connection = new Connection(`${process.env.SOLANA_RPC_URL}`);
   const limit = pLimit(5); // Limit the number of concurrent requests
-  // Function to fetch balance for a given Solana wallet
-  async function getSolanaWalletBalance(walletAddress, tokenMintAddresses) {
-    try {
-      const publicKey = new PublicKey(walletAddress);
-
-      // // Fetch SOL balance
-      // const solBalance = await connection.getMultipleAccountsInfo(publicKey);
-      // const solBalanceInSOL = solBalance / 1e9; // Convert lamports to SOL
-
-      // Fetch SPL token balances (USDC, USDT, etc.)
-      const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
-        publicKey,
-        {
-          programId: new PublicKey(
-            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-          ), // Solana Token Program ID
-        }
-      );
-
-      // Initialize balances for each token
-      const tokenBalances = {};
-      tokenMintAddresses.forEach((mintAddress) => {
-        tokenBalances[mintAddress] = 0;
-      });
-
-      // Loop through token accounts to find balances
-      tokenAccounts.value.forEach((account) => {
-        const tokenAmount =
-          account.account.data.parsed.info.tokenAmount.uiAmount;
-        const mintAddress = account.account.data.parsed.info.mint;
-
-        if (tokenMintAddresses.includes(mintAddress)) {
-          tokenBalances[mintAddress] = tokenAmount;
-        }
-      });
-
-      return { solBalanceInSOL, tokenBalances };
-    } catch (error) {
-      console.error(
-        `Error fetching balance for wallet ${walletAddress}:`,
-        error
-      );
-      return null;
-    }
-  }
 
   // Function to fetch and update balances for multiple wallet addresses
   async function fetchAndUpdateBalances(walletAddresses) {
@@ -68,7 +23,6 @@ const models = require("../models"); // Import your models for database access
 
       // Map over the accounts info and extract balances in SOL
       const balances = accountsInfo.map((accountInfo, index) => {
-        console.log("Account Info  ", accountInfo);
         if (accountInfo === null) return null; // If account info is null, return null
         return {
           walletAddress: walletAddresses[index],

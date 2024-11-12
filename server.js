@@ -8,7 +8,7 @@ const expressSession = require('express-session');
 const http = require('http');
 const https = require('https');
 const { startListeningSolanaEvents } = require("./utils/web3Utils");
-const { automaticOrderCancellationCron } = require("./controllers/orders.controller");
+const automaticOrderCancellationCron  = require("./crons/automatic_order_cancellation_cron");
 const balanceFetchCron = require("./crons/automatic_balance_fetch_cron");
 //const {setupAdminJS} = require('./setupadminjs');
 
@@ -57,7 +57,7 @@ const startServer = async () => {
   //as soon as the server starts, start listening for our program events.
   startListeningSolanaEvents(io);
   //start cron every minute for automatic cancellation
-  automaticOrderCancellationCron();
+  //automaticOrderCancellationCron();
 
   // Middleware
   app.use(express.json());
