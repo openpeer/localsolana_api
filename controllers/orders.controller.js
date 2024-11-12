@@ -281,7 +281,10 @@ exports.createOrder = async function (req, res) {
     })
     let list = await models.lists.findOne({
       where: {
-        id: list_id
+        id: list_id,
+        status: {
+          [Op.notIn]: [0, 2], // Exclude status 0 and 2(Hidden and deleted status)
+        }
       }
     })
     let bankID = null;

@@ -212,7 +212,14 @@ exports.getAllLists =  async (req, res) => {
   exports.getList =  async (req, res) => {
     const { id } = req.params;
     try {
-      const list = await models.lists.findByPk(id);
+      const list = await models.lists.findOne({
+        where: {
+          id: id,
+          status: {
+            [Op.notIn]: [0, 2], // Exclude status 0 and 2(Hidden and deleted status)
+          }
+        }
+      })
       if (!list) {
         return errorResponse(res, httpCodes.badReq,Messages.listNotFound);
       }

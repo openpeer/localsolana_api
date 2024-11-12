@@ -1,151 +1,152 @@
 const cron = require("node-cron");
 const { Connection, PublicKey } = require("@solana/web3.js");
-const models = require("../models");
-const { Op } = require('sequelize');
+const models = require("../models"); // Import your models for database access
+const { Op } = require("sequelize"); // Import Op for Sequelize operations
 
 (async () => {
   const pLimit = (await import("p-limit")).default;
 
   // Initialize Solana connection
   const connection = new Connection(`${process.env.SOLANA_RPC_URL}`);
-  const limit = pLimit(5); // Limit the number of concurrent requests
+  const limit = pLimit(5); // Limit the number of concurrent requests to 5
 
-  // Function to batch process wallet addresses
-  function createBatches(array, batchSize) {
-    const batches = [];
-    for (let i = 0; i < array.length; i += batchSize) {
-      batches.push(array.slice(i, i + batchSize));
-    }
-    return batches;
-  }
-
-  // Function to fetch and update SPL token balances in batches
+  // Function to fetch and update SPL token balances using p-limit
   async function fetchAndUpdateSPLTokenBalances(walletAddresses, tokenSymbol, mintAddress) {
-    const batches = createBatches(walletAddresses, 3); // Batch size of 3
+    const tokenBalances = [];
 
-    for (const batch of batches) {
+    // Function to fetch balance for a single wallet
+    const fetchBalanceForWallet = async (walletAddress) => {
       try {
-        const tokenBalances = [];
+        const publicKey = new PublicKey(walletAddress);
+        const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
+          programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"), // Solana Token Program ID
+        });
 
-        // Fetch token balances for each wallet in the batch
-        for (const walletAddress of batch) {
-          const publicKey = new PublicKey(walletAddress);
-          const tokenAccounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
-            programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"), // Solana Token Program ID
-          });
-
-          let balance = 0;
-          tokenAccounts.value.forEach((account) => {
-            if (account.account.data.parsed.info.mint === mintAddress) {
-              balance += account.account.data.parsed.info.tokenAmount.uiAmount;
-            }
-          });
-
-          tokenBalances.push({ walletAddress, balance });
-        }
-
-        // Update available_token_amount for the relevant lists
-        for (const { walletAddress, balance } of tokenBalances) {
-          const listsToUpdate = await models.lists.findAll({
-            where: {
-              escrow_type: 1,
-              "$seller.contract_address$": walletAddress,
-              "$token.symbol$": tokenSymbol,
-            },
-            include: [
-              {
-                model: models.user,
-                as: "seller",
-                attributes: ["contract_address"],
-              },
-              {
-                model: models.tokens,
-                as: "token",
-                attributes: ["symbol"],
-              },
-            ],
-          });
-
-          for (const list of listsToUpdate) {
-            console.log(`Updating ${tokenSymbol} balance for list:`, list.id, "with balance:", balance);
-            await models.lists.update(
-              { total_available_amount: balance },
-              { where: { id: list.id } }
-            );
+        let balance = 0;
+        tokenAccounts.value.forEach((account) => {
+          if (account.account.data.parsed.info.mint === mintAddress) {
+            balance += account.account.data.parsed.info.tokenAmount.uiAmount;
           }
-        }
+        });
 
-        console.log(`Batch of ${tokenSymbol} balances updated successfully.`);
+        tokenBalances.push({ walletAddress, balance });
       } catch (error) {
-        console.error(`Error fetching ${tokenSymbol} balances for a batch, skipping batch:`, error);
-        // Skip this batch and continue with the next one
-        continue;
+        console.error(`Error fetching balance for wallet ${walletAddress}:`, error);
+        // Skip this wallet and continue
       }
-    }
-  }
+    };
 
-  // Function to fetch and update SOL balances
-  async function fetchAndUpdateSOLBalances(walletAddresses) {
-    try {
-      const publicKeys = walletAddresses.map((address) => new PublicKey(address));
-      const accountsInfo = await connection.getMultipleAccountsInfo(publicKeys);
+    // Use p-limit to limit the number of concurrent balance fetches
+    const fetchPromises = walletAddresses.map((walletAddress) => limit(() => fetchBalanceForWallet(walletAddress)));
+    await Promise.all(fetchPromises);
 
-      // Map over the accounts info and extract balances in SOL
-      const balances = accountsInfo.map((accountInfo, index) => {
-        if (accountInfo === null) return null;
-        return {
-          walletAddress: walletAddresses[index],
-          balance: accountInfo.lamports / 1e9, // Convert lamports to SOL
-        };
+    // Update available_token_amount for the relevant lists
+    for (const { walletAddress, balance } of tokenBalances) {
+      const listsToUpdate = await models.lists.findAll({
+        where: {
+          escrow_type: 1,
+          "$seller.contract_address$": walletAddress,
+          "$token.symbol$": tokenSymbol,
+          status: {
+            [Op.notIn]: [0, 2], // Exclude status 0 and 2
+          },
+        },
+        include: [
+          {
+            model: models.user,
+            as: "seller",
+            attributes: ["contract_address"],
+          },
+          {
+            model: models.tokens,
+            as: "token",
+            attributes: ["symbol"],
+          },
+        ],
       });
 
-      // Update available_token_amount for SOL-based lists
-      for (const balanceInfo of balances) {
-        if (balanceInfo !== null) {
-          const listsToUpdate = await models.lists.findAll({
-            where: {
-              escrow_type: 1,
-              "$seller.contract_address$": balanceInfo.walletAddress,
-              "$token.symbol$": "SOL", // Only update SOL-based lists
-            },
-            include: [
-              {
-                model: models.user,
-                as: "seller",
-                attributes: ["contract_address"],
-              },
-              {
-                model: models.tokens,
-                as: "token",
-                attributes: ["symbol"],
-              },
-            ],
-          });
-
-          for (const list of listsToUpdate) {
-            console.log("Updating SOL balance for list:", list.id, "with balance:", balanceInfo.balance);
-            await models.lists.update(
-              { total_available_amount: balanceInfo.balance },
-              { where: { id: list.id } }
-            );
-          }
-        }
+      for (const list of listsToUpdate) {
+        console.log(`Updating ${tokenSymbol} balance for list:`, list.id, "with balance:", balance);
+        await models.lists.update(
+          {
+            total_available_amount: balance,
+          },
+          { where: { id: list.id } }
+        );
       }
-
-      console.log("SOL balances updated successfully for all relevant lists.");
-    } catch (error) {
-      console.error("Error fetching and updating SOL balances:", error);
     }
+
+    console.log(`Balances for ${tokenSymbol} updated successfully.`);
   }
 
-  // Fetch wallet addresses and update balances in batches
+  // Function to fetch and update SOL balances using p-limit
+  async function fetchAndUpdateSOLBalances(walletAddresses) {
+    const solBalances = [];
+
+    // Function to fetch SOL balance for a single wallet
+    const fetchSOLBalanceForWallet = async (walletAddress) => {
+      try {
+        const publicKey = new PublicKey(walletAddress);
+        const accountInfo = await connection.getAccountInfo(publicKey);
+
+        const balance = accountInfo ? accountInfo.lamports / 1e9 : 0; // Convert lamports to SOL
+        solBalances.push({ walletAddress, balance });
+      } catch (error) {
+        console.error(`Error fetching SOL balance for wallet ${walletAddress}:`, error);
+        // Skip this wallet and continue
+      }
+    };
+
+    // Use p-limit to limit the number of concurrent SOL balance fetches
+    const fetchPromises = walletAddresses.map((walletAddress) => limit(() => fetchSOLBalanceForWallet(walletAddress)));
+    await Promise.all(fetchPromises);
+
+    // Update available_token_amount for SOL-based lists
+    for (const { walletAddress, balance } of solBalances) {
+      const listsToUpdate = await models.lists.findAll({
+        where: {
+          escrow_type: 1,
+          "$seller.contract_address$": walletAddress,
+          "$token.symbol$": "SOL", // Only update SOL-based lists
+          status: {
+            [Op.notIn]: [0, 2], // Exclude status 0 and 2
+          },
+        },
+        include: [
+          {
+            model: models.user,
+            as: "seller",
+            attributes: ["contract_address"],
+          },
+          {
+            model: models.tokens,
+            as: "token",
+            attributes: ["symbol"],
+          },
+        ],
+      });
+
+      for (const list of listsToUpdate) {
+        console.log("Updating SOL balance for list:", list.id, "with balance:", balance);
+        await models.lists.update(
+          {
+            total_available_amount: balance,
+            last_balance_fetch: new Date(), // Update last fetch time
+          },
+          { where: { id: list.id } }
+        );
+      }
+    }
+
+    console.log("SOL balances updated successfully.");
+  }
+
+  // Function to fetch wallet addresses and update balances
   async function updateWalletBalances() {
     try {
       const lists = await models.lists.findAll({
         attributes: ["id", "seller_id"],
-        where: { escrow_type: 1,status: {
-            [Op.notIn]: [0, 2],
-          }, },
+        where: { escrow_type: 1 },
         include: [
           {
             model: models.user,
@@ -175,7 +176,7 @@ const { Op } = require('sequelize');
 
       for (const list of lists) {
         const walletAddress = list.seller?.contract_address;
-        if (!walletAddress) continue; // Skip if walletAddress is not available
+        if (!walletAddress) continue;
 
         const mintAddress = list.token?.address;
         const tokenSymbol = tokenMap[mintAddress]?.symbol;
@@ -200,15 +201,15 @@ const { Op } = require('sequelize');
         await fetchAndUpdateSOLBalances(solArray);
       }
 
-      // Fetch and update USDC balances in batches
+      // Fetch and update USDC balances
       if (usdcArray.length > 0) {
-        const usdcMintAddress = tokenMap[Object.keys(tokenMap).find(key => tokenMap[key].symbol === "USDC")].address;
+        const usdcMintAddress = tokenMap[Object.keys(tokenMap).find((key) => tokenMap[key].symbol === "USDC")].address;
         await fetchAndUpdateSPLTokenBalances(usdcArray, "USDC", usdcMintAddress);
       }
 
-      // Fetch and update USDT balances in batches
+      // Fetch and update USDT balances
       if (usdtArray.length > 0) {
-        const usdtMintAddress = tokenMap[Object.keys(tokenMap).find(key => tokenMap[key].symbol === "USDT")].address;
+        const usdtMintAddress = tokenMap[Object.keys(tokenMap).find((key) => tokenMap[key].symbol === "USDT")].address;
         await fetchAndUpdateSPLTokenBalances(usdtArray, "USDT", usdtMintAddress);
       }
     } catch (error) {
