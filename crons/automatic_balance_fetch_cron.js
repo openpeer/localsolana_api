@@ -131,7 +131,6 @@ const { Op } = require("sequelize"); // Import Op for Sequelize operations
         await models.lists.update(
           {
             total_available_amount: balance,
-            last_balance_fetch: new Date(), // Update last fetch time
           },
           { where: { id: list.id } }
         );
@@ -218,7 +217,7 @@ const { Op } = require("sequelize"); // Import Op for Sequelize operations
   }
 
   // Schedule the CRON job to run every 10 minutes
-  cron.schedule("*/10 * * * *", () => {
+  cron.schedule("*/2 * * * *", () => {
     console.log("Running CRON job to update Solana wallet balances...");
     updateWalletBalances();
   });

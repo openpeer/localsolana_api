@@ -256,6 +256,23 @@ exports.cancelOrder = async (req, res, io) => {
       const sellerChannel = `OrdersChannel_${order.id}_${order.dataValues.seller_id}`;
       io.to(sellerChannel).emit('orderUpdate', await fetchedOrderLoop(updatedOrder));
     }
+
+    let list = await models.lists.findOne({
+      where: {
+        id: order.dataValues.list_id,
+      }
+    })
+
+    if(list.dataValues.escrow_type == 1){
+      //calculate the new balance for list
+      const newBalance = parseFloat(list.dataValues.total_available_amount) + parseFloat(order.dataValues.token_amount);
+      await models.lists.update(
+        {
+          total_available_amount: newBalance,
+        },
+        { where: { id: list.dataValues.id } }
+      );
+    }
     try{
     await  new NotificationWorker().perform(NotificationWorker.ORDER_CANCELLED,order.dataValues.id);
     }catch(e){
@@ -336,6 +353,17 @@ exports.createOrder = async function (req, res) {
       { trade_id: tradeID.toBase58() },
       { where: { id: data.dataValues.id } }
     );
+    console.log('EscrowType is',list.dataValues.escrow_type);
+    if(list.dataValues.escrow_type == 1){
+    //calculate the new balance for list
+    const newBalance = list.dataValues.total_available_amount - token_amount;
+    await models.lists.update(
+      {
+        total_available_amount: newBalance,
+      },
+      { where: { id: list.id } }
+    );
+  }
     await  new NotificationWorker().perform(NotificationWorker.NEW_ORDER,data.dataValues.id);
     return successResponse(res, Messages.success, data);
   } catch (error) {
