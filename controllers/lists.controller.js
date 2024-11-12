@@ -147,7 +147,12 @@ exports.getAllLists =  async (req, res) => {
         const totalRecords = await models.lists.count({where: filter});
         const totalPages = Math.ceil(totalRecords / 20);
         const listData = await models.lists.findAll({
-            where: filter,
+            where: {
+              ...filter,
+              status: {
+                [Op.eq]: 1,
+              },
+            },
             limit: pageSizeNumber,
            offset: offset,
             order: [['created_at', 'DESC']],
@@ -252,27 +257,27 @@ exports.getAllLists =  async (req, res) => {
       if (!fetchedList) {
         return errorResponse(res, httpCodes.badReq,Messages.listNotFound);
       }
-      fetchedList.chain_id = chain_id,
-      fetchedList.seller_id = seller_id,
-      fetchedList.token_id = token_id,
-      fetchedList.fiat_currency_id = fiat_currency_id,
-      fetchedList.total_available_amount = total_available_amount,
-      fetchedList.limit_min = limit_min,
-      fetchedList.limit_max = limit_max,
-      fetchedList.margin_type = margin_type,
-      fetchedList.margin = margin,
-      fetchedList.terms = terms,
-      fetchedList.automatic_approval = automatic_approval,
-      fetchedList.status = status,
-      fetchedList.payment_method_id = payment_method_id,
-      fetchedList.type = type,
-      fetchedList.bank_id = bank_id,
-      fetchedList.deposit_time_limit = deposit_time_limit,
-      fetchedList.payment_time_limit = payment_time_limit,
-      fetchedList.accept_only_verified = accept_only_verified,
-      fetchedList.escrow_type = escrow_type,
-      fetchedList.price_source = price_source,
-      fetchedList.price = price
+      (fetchedList.chain_id = chain_id),
+      (fetchedList.seller_id = seller_id),
+      (fetchedList.token_id = token_id),
+      (fetchedList.fiat_currency_id = fiat_currency_id),
+      (fetchedList.total_available_amount = total_available_amount),
+      (fetchedList.limit_min = limit_min),
+      (fetchedList.limit_max = limit_max),
+      (fetchedList.margin_type = margin_type),
+      (fetchedList.margin = margin),
+      (fetchedList.terms = terms),
+      (fetchedList.automatic_approval = automatic_approval),
+      (fetchedList.status = status),
+      (fetchedList.payment_method_id = payment_method_id),
+      (fetchedList.type = type),
+      (fetchedList.bank_id = bank_id),
+      (fetchedList.deposit_time_limit = deposit_time_limit),
+      (fetchedList.payment_time_limit = payment_time_limit),
+      (fetchedList.accept_only_verified = accept_only_verified),
+      (fetchedList.escrow_type = escrow_type),
+      (fetchedList.price_source = price_source),
+      (fetchedList.price = price);
       
       bankIds = req.body.bank_ids;
       
@@ -398,21 +403,27 @@ exports.getAllLists =  async (req, res) => {
     }
   };
   
-  // method for deleting the list using id as a parameter
-  exports.deleteList =  async (req, res) => {
-    const { id } = req.params;
-    try {
-      const fetchedList = await models.list.findByPk(id);
-      if (!fetchedList) {
-        return errorResponse(res, httpCodes.badReq,Messages.listNotFound)
-      }
-      await fetchedList.destroy();
-      return successResponse(res, Messages.deletedSuccessfully);
-    } catch (error) {
-      console.error(error);
-      return errorResponse(res, httpCodes.serverError,Messages.systemError);
+// method for deleting the list using id as a parameter
+exports.deleteList = async (req, res) => {
+  const { id } = req.params;
+  const { user } = req;
+  try {
+    const fetchedList = await models.lists.findByPk(id);
+    if (!fetchedList) {
+      return errorResponse(res, httpCodes.badReq, Messages.listNotFound);
     }
-  };
+    if (fetchedList.dataValues.seller_id == user.dataValues.id) {
+      fetchedList.set("status", 2);
+      await fetchedList.save();
+      return successResponse(res, Messages.deletedSuccessfully);
+    } else {
+      return errorResponse(res, httpCodes.forbidden, Messages.NoAccess);
+    }
+  } catch (error) {
+    console.error(error);
+    return errorResponse(res, httpCodes.serverError, Messages.systemError);
+  }
+};
   
   //method for getting the count for the lists
   module.exports.getListsCount = async(req, res) => {
@@ -608,3 +619,68 @@ exports.getAllLists =  async (req, res) => {
       res.status(500).json({ error: error.message });
     }
   }
+
+  exports.fetchMyAds = async (req, res) => {
+    console.log('here in my ads');
+    const { user } = req;
+    try {
+      let page = req.query.page ? req.query.page : 1;
+      let pageSize = req.query.pageSize ? req.query.pageSize : 20;
+      const pageNumber = Math.max(parseInt(page), 1);
+      const pageSizeNumber = Math.max(parseInt(pageSize), 1);
+      const offset = (pageNumber - 1) * pageSizeNumber;
+      const userData = await models.user.findOne({
+        where: {
+          address: user.address,
+        },
+        limit: pageSizeNumber,
+        offset: offset,
+        order: [["created_at", "DESC"]],
+      });
+      //console.log("user",user)
+      const listData = await models.lists.findAll({
+        limit: pageSizeNumber,
+        offset: offset,
+        order: [["created_at", "DESC"]],
+        where: {
+          seller_id: userData.dataValues.id,
+          status: {
+            [Op.ne]: 2,
+          },
+        },
+      });
+      //console.log("listData", listData);
+      let output = [];
+      if (listData !== null) {
+        for (const item of listData) {
+          let bankIdsData = [];
+          if (item.dataValues.type == "SellList") {
+            const result = await fetchedListLoop(item);
+            //  console.log("data", data);
+            output.push(result);
+          } else {
+            const bankIds = await models.lists_banks.findAll({
+              attributes: ["bank_id"],
+              where: {
+                list_id: item.dataValues.id,
+              },
+            });
+            bankIds.forEach((record) => {
+              let banks = record.dataValues.bank_id; // Extract data values from each record
+              bankIdsData.push(banks);
+            });
+            const result = await fetchedListLoop(item, bankIdsData);
+  
+            //console.log("data", data);
+            output.push(result);
+          }
+        }
+      } else {
+        return errorResponse(res, httpCodes.badReq, Messages.noDataFound);
+      }
+      return successResponse(res, Messages.getList, output);
+    } catch (error) {
+      console.error(error);
+      return errorResponse(res, httpCodes.serverError, Messages.systemError);
+    }
+  };

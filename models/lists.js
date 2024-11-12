@@ -13,6 +13,8 @@ module.exports = (sequelize, DataTypes) => {
       // Association with User model as buyer
       lists.belongsTo(models.tokens, { as: 'token', foreignKey: 'token_id' });
       lists.belongsTo(models.fiat_currencies, { as: 'fiat_currencies', foreignKey: 'fiat_currency_id' });
+      lists.belongsTo(models.user, { as: 'seller', foreignKey: 'seller_id' });
+
     }
   }
   lists.init({

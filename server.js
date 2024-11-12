@@ -9,6 +9,8 @@ const http = require('http');
 const https = require('https');
 const { startListeningSolanaEvents } = require("./utils/web3Utils");
 const { automaticOrderCancellationCron } = require("./controllers/orders.controller");
+const balanceFetchCron = require("./crons/automatic_balance_fetch_cron");
+//const {setupAdminJS} = require('./setupadminjs');
 
 // Initialize express app
 const app = express();
@@ -66,12 +68,11 @@ const startServer = async () => {
     res.status(200).send('OK');
   });
 
-  // Define the home route
-  // app.get('/', (req, res) => {
-  //   res.render('index', {
-  //     name: 'Ductn'
-  //   });
-  // });
+  // setupAdminJS(app)
+  // .then(() => {
+  //   console.log("AdminJS setup complete");
+  // })
+  // .catch((err) => console.error("Error setting up AdminJS:", err));
 
   // Use API routes
   const createRouter = require('./api/routes/routes');
