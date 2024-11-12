@@ -69,10 +69,11 @@ const createRouter = (io) => {
     // Routes for the Lists
     router.post('/createList', listController.createList);
     router.get('/getLists', listController.getAllLists);
+    router.get('/lists/ads',authenticateToken, listController.fetchMyAds);
     router.get('/lists/:id', listController.getList);
     router.get('/getListsCount', listController.getListsCount);
     router.put('/list_management/:id',authenticateToken, (req, res) =>listController.updateList(req, res));
-    router.delete('/list_management/:id', listController.deleteList);
+    router.delete('/list_management/:id',authenticateToken, listController.deleteList);
     router.get('/lists', listController.fetchListForParticularUser);
 
     // Routes for tokens

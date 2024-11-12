@@ -256,6 +256,23 @@ exports.cancelOrder = async (req, res, io) => {
       const sellerChannel = `OrdersChannel_${order.id}_${order.dataValues.seller_id}`;
       io.to(sellerChannel).emit('orderUpdate', await fetchedOrderLoop(updatedOrder));
     }
+
+    let list = await models.lists.findOne({
+      where: {
+        id: order.dataValues.list_id,
+      }
+    })
+
+    if(list.dataValues.escrow_type == 1){
+      //calculate the new balance for list
+      const newBalance = parseFloat(list.dataValues.total_available_amount) + parseFloat(order.dataValues.token_amount);
+      await models.lists.update(
+        {
+          total_available_amount: newBalance,
+        },
+        { where: { id: list.dataValues.id } }
+      );
+    }
     try{
     await  new NotificationWorker().perform(NotificationWorker.ORDER_CANCELLED,order.dataValues.id);
     }catch(e){
@@ -281,7 +298,10 @@ exports.createOrder = async function (req, res) {
     })
     let list = await models.lists.findOne({
       where: {
-        id: list_id
+        id: list_id,
+        status: {
+          [Op.notIn]: [0, 2], // Exclude status 0 and 2(Hidden and deleted status)
+        }
       }
     })
     let bankID = null;
@@ -333,6 +353,17 @@ exports.createOrder = async function (req, res) {
       { trade_id: tradeID.toBase58() },
       { where: { id: data.dataValues.id } }
     );
+    console.log('EscrowType is',list.dataValues.escrow_type);
+    if(list.dataValues.escrow_type == 1){
+    //calculate the new balance for list
+    const newBalance = list.dataValues.total_available_amount - token_amount;
+    await models.lists.update(
+      {
+        total_available_amount: newBalance,
+      },
+      { where: { id: list.id } }
+    );
+  }
     await  new NotificationWorker().perform(NotificationWorker.NEW_ORDER,data.dataValues.id);
     return successResponse(res, Messages.success, data);
   } catch (error) {
@@ -552,53 +583,4 @@ exports.handleTransaction = async(req, res) => {
   }
 }
 
-const executeAutomaticOrderCancellationTask = async () => {
-
-  const [affectedCount, updatedRecords] = await models.Order.update(
-    {
-      status: 3,
-      cancelled_at: Sequelize.fn('NOW'),
-    },
-    {
-      where: {
-        [Op.or]: [
-          {
-            status: 0,
-            deposit_time_limit: { [Op.gt]: 0 },
-            created_at: {
-              [Op.lte]: Sequelize.literal(`NOW() - (deposit_time_limit * INTERVAL '1 MINUTE')`)
-            }
-          },
-          {
-            status: 1,
-            payment_time_limit: { [Op.gt]: 0 },
-            created_at: {
-              [Op.lte]: Sequelize.literal(`NOW() - (payment_time_limit * INTERVAL '1 MINUTE')`)
-            }
-          }
-        ]
-      },
-      returning: ['id']
-      // logging: console.log,
-    }
-  );
-
-  const updatedIds = updatedRecords.map(record => record.id);
-  console.log("Total number of row's that has been updated during automatic order cancellation are: ", affectedCount);
-  console.log("Order Id's that has been cancelled automatically: ", updatedIds);
-  // Add your task logic here
-};
-
-exports.automaticOrderCancellationCron = async(req, res) => {
-
-  // cron will run after each minute.
-  cron.schedule('* * * * *', async () => {
-    console.log("Cancelling orders automatically cron job starts at: ", new Date().toLocaleDateString(), new Date().toLocaleTimeString());
-    await executeAutomaticOrderCancellationTask();
-    console.log("Cancelling orders automatically cron job ends at: ",new Date().toLocaleDateString(),  new Date().toLocaleTimeString());
-  });
-
-  // In case cron is hit from the browser
-  console.log('Cron job scheduled');
-}
 

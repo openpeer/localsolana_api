@@ -40,6 +40,7 @@
     "node-fetch": "^2.7.0",
     "node-localstorage": "^2.1.5",
     "node-telegram-bot-api": "^0.66.0",
+    "p-limit": "^6.1.0",
     "pg": "^8.13.1",
     "promise": "^8.1.0",
     "pug": "^3.0.1",
