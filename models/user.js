@@ -65,8 +65,8 @@ module.exports = (sequelize) => {
     modelName: 'user',
     hooks: {
       beforeValidate: async (user, options) => {
-        if (user.isNewRecord) {
-          user.name = await user.generateUniqueUsername();
+        if (user.isNewRecord && user.name) {
+          user.unique_identifier = user.name.toLowerCase();
         }
       },
       afterSave: async (user, options) => {
