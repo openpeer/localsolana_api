@@ -1,8 +1,10 @@
 'use strict';
 const {
-  Model
+  Model, DataTypes
 } = require('sequelize');
-module.exports = (sequelize, DataTypes) => {
+const TalkjsSyncJob = require('../jobs/talkjsSyncJob');
+
+module.exports = (sequelize) => {
   class user extends Model {
     /**
      * Helper method for defining associations.
@@ -61,6 +63,38 @@ module.exports = (sequelize, DataTypes) => {
   }, {
     sequelize,
     modelName: 'user',
+    hooks: {
+      beforeValidate: async (user, options) => {
+        if (user.isNewRecord) {
+          user.name = await user.generateUniqueUsername();
+        }
+      },
+      afterSave: async (user, options) => {
+        if (user.changed('name') || user.changed('email') || user.changed('image')) {
+          TalkjsSyncJob.performLater(user.id);
+        }
+      },
+    },
   });
+
+  user.generateUniqueUsername = async function () {
+    let username;
+    do {
+      username = sanitizeUsername(generateRandomName());
+    } while (await user.findOne({ where: { name: username } }));
+    return username;
+  };
+
+  function generateRandomName() {
+    const rng = new RandomNameGenerator(RandomNameGenerator.ROMAN);
+    return rng.compose(3);
+  }
+
+  function sanitizeUsername(username) {
+    let sanitized = username.replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 11);
+    sanitized += Math.floor(1000 + Math.random() * 9000);
+    return sanitized;
+  }
+
   return user;
 };
