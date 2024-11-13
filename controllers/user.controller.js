@@ -14,6 +14,8 @@ const getLocalSolanaAccount = function (userAddress) {
   );
   return escrowStatePda_;
 };
+const {isOnline}= require("../utils/util");
+
 // create user
 module.exports.createUser = async (req, res) => {
   try {
