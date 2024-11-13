@@ -288,48 +288,21 @@ exports.getAllLists =  async (req, res) => {
       
       bankIds = req.body.bank_ids;
       
-      if (type==='BuyList' && bankIds.length > 0) {
-        // First, get all existing bank IDs for this list
-        const existingEntries = await sequelize.query(
-          `SELECT bank_id FROM "lists_banks" 
-           WHERE list_id = ${id}`,
-          {
-            type: QueryTypes.SELECT
-          }
-        );
-        
-        const existingBankIds = existingEntries.map(entry => entry.bank_id);
-        
-        // Delete entries that are not in the new bankIds
-        await sequelize.query(
-          `DELETE FROM "lists_banks" 
-           WHERE list_id = :listId 
-           AND bank_id NOT IN (:bankIds)`,
-          {
-            replacements: { 
-              listId: id,
-              bankIds: existingBankIds.join(",")
-            },
-            type: QueryTypes.DELETE
-          }
-        );
-        
-        const list_id=id;
-        // Insert new entries that don't exist yet
-        for (let value of bankIds) {
-          await sequelize.query(
-            `INSERT INTO "lists_banks" ("list_id", "bank_id")
-             VALUES (:listId, :bankId)
-             ON CONFLICT ("list_id", "bank_id") DO NOTHING`,
-            {
-              replacements: {
-                listId: list_id,
-                bankId: value.id
-              },
-              type: QueryTypes.INSERT
-            }
-          );
-        }
+      if (type === "BuyList" && payment_methods.length > 0) {
+        // Delete existing banks
+        await models.lists_banks.destroy({
+          where: {
+            list_id: list_id,
+          },
+        });
+  
+        const newBanksData = payment_methods.map((data) => ({
+          list_id: list_id,
+          bank_id: data.bank.id,
+        }));
+  
+        await sequelize.getQueryInterface().bulkInsert("lists_banks", newBanksData);
+  
       }
       else if(type==='SellList' && payment_methods.length > 0){
         
