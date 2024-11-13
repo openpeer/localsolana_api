@@ -333,14 +333,14 @@ exports.getAllLists =  async (req, res) => {
 
             let payment_method_id=0;
             if(!result){
-               const payment_method_created=models.payment_methods.create([
+               const payment_method_created=models.payment_methods.create(
                 {
                   user_id:user.id,
                   bank_id:params.bank_id,
                   values:params.values,
                   type:'ListPaymentMethod'
                 }
-              ]);
+              );
               payment_method_id=payment_method_created.dataValues.id;
             }else{
               payment_method_id=result.dataValues.id;
