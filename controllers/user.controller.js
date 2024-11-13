@@ -1,4 +1,4 @@
-const { v4: uuidv4 } = require('uuid');
+const { v4: uuidv4 } = require("uuid");
 const models = require("../models/index");
 const { errorResponse, successResponse } = require("../utils/rest");
 const Messages = require("../utils/messages");
@@ -93,6 +93,7 @@ exports.getUser = async (req, res) => {
         address: address,
       },
     });
+    let updatedUserData = null;
     if (!user) {
       let newUser = {
         address: address,
@@ -105,13 +106,9 @@ exports.getUser = async (req, res) => {
         timezone: "",
         weeekend_offline: false,
         contract_address: null,
-        telegram_user_id: null,
-        telegram_username: null,
-        whatsapp_country_code: null,
-        whatsapp_number: null,
-        unique_identifier: uuidv4(),
       };
       let data = await models.user.create(newUser);
+      
       // Step 2: Generate LocalSolanaAccount
       const localSolanaAccount = getLocalSolanaAccount(address);
 
@@ -120,9 +117,11 @@ exports.getUser = async (req, res) => {
         { contract_address: localSolanaAccount.toBase58() },
         { where: { id: data.dataValues.id }, returning: true }
       );
+      updatedUser.dataValues['online'] = isOnline(updatedUser.dataValues.timezone, updatedUser.dataValues.available_from, updatedUser.dataValues.available_to, updatedUser.dataValues.weeekend_offline);
+
       return successResponse(res, Messages.login, updatedUser);
     } else {
-      let updatedUserData = null;
+      
       if (user.dataValues.contract_address == null) {
         // Step 2: Generate LocalSolanaAccount
         const localSolanaAccount = getLocalSolanaAccount(address);
@@ -132,10 +131,16 @@ exports.getUser = async (req, res) => {
           { contract_address: localSolanaAccount.toBase58() },
           { where: { id: user.dataValues.id }, returning: true }
         );
-        updatedUserData = updatedUserData;
+        updatedUser.dataValues['online'] = isOnline(updatedUser.dataValues.timezone, updatedUser.dataValues.available_from, updatedUser.dataValues.available_to, updatedUser.dataValues.weeekend_offline);
+        updatedUserData = updatedUser;
       }
-      return successResponse(res, Messages.login, updatedUserData??user);
+
+      if(user){
+        updatedUserData=user;
+        updatedUserData.dataValues['online'] = isOnline(updatedUserData.dataValues.timezone, updatedUserData.dataValues.available_from, updatedUserData.dataValues.available_to, updatedUserData.dataValues.weeekend_offline);
+      }
     }
+    return successResponse(res, Messages.login, updatedUserData??user);
   } catch (error) {
     console.error(error);
     return errorResponse(res, httpCodes.serverError, Messages.systemError);
