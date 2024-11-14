@@ -4,6 +4,8 @@ const {
 } = require('sequelize');
 const TalkjsSyncJob = require('../jobs/talkjsSyncJob');
 const { uniqueNamesGenerator, colors, animals } = require('unique-names-generator');
+const { v4: uuidv4 } = require("uuid");
+
 
 module.exports = (sequelize) => {
   class user extends Model {
