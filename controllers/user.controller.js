@@ -1,4 +1,3 @@
-const { v4: uuidv4 } = require("uuid");
 const models = require("../models/index");
 const { errorResponse, successResponse } = require("../utils/rest");
 const Messages = require("../utils/messages");
@@ -20,8 +19,6 @@ const {isOnline}= require("../utils/util");
 module.exports.createUser = async (req, res) => {
   try {
 
-    const unique_identifier = uuidv4();
-
     let newUser = {
       address: req.body.address,
       email: req.body.email,
@@ -39,7 +36,6 @@ module.exports.createUser = async (req, res) => {
       telegram_username: req.body.telegram_username,
       whatsapp_country_code: req.body.whatsapp_country_code,
       whatsapp_number: req.body.whatsapp_number,
-      unique_identifier: unique_identifier
     };
     const userAlreadyCreated = await models.user.findOne({
       where: {
