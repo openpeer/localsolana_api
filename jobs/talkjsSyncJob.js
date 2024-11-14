@@ -1,12 +1,11 @@
-const models = require('../models');
 const TalkjsUserSyncService = require('../services/talkjsUserSyncService');
 
 class TalkjsSyncJob {
-  static async performLater(userId) {
-    setTimeout(() => this.perform(userId), 0);
+  static async performLater(models, userId) {
+    setTimeout(() => this.perform(models, userId), 0);
   }
 
-  static async perform(userId) {
+  static async perform(models, userId) {
     try {
       const user = await models.user.findByPk(userId);
       if (!user) return;

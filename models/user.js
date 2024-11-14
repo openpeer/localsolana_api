@@ -3,6 +3,7 @@ const {
   Model, DataTypes
 } = require('sequelize');
 const TalkjsSyncJob = require('../jobs/talkjsSyncJob');
+const { uniqueNamesGenerator, colors, animals } = require('unique-names-generator');
 
 module.exports = (sequelize) => {
   class user extends Model {
@@ -14,7 +15,21 @@ module.exports = (sequelize) => {
     static associate(models) {
       // define association here
     }
+
+    static async generateUniqueUsername() {
+      let username;
+      do {
+        username = uniqueNamesGenerator({
+          dictionaries: [colors, animals],
+          separator: '_',
+          length: 2,
+        }) + Math.floor(1000 + Math.random() * 9000);
+      } while (await user.findOne({ where: { name: username } }));
+      return username;
+    }
+
   }
+  
   user.init({
     address: DataTypes.STRING,
     email: DataTypes.STRING,
@@ -65,36 +80,22 @@ module.exports = (sequelize) => {
     modelName: 'user',
     hooks: {
       beforeValidate: async (user, options) => {
-        if (user.isNewRecord && user.name) {
-          user.unique_identifier = user.name.toLowerCase();
+        if (user.isNewRecord) {
+          if (!user.unique_identifier) {
+            user.unique_identifier = uuidv4();
+          }
+          if (!user.name) {
+            user.name = await user.constructor.generateUniqueUsername();
+          }
         }
       },
       afterSave: async (user, options) => {
         if (user.changed('name') || user.changed('email') || user.changed('image')) {
-          TalkjsSyncJob.performLater(user.id);
+          TalkjsSyncJob.performLater(sequelize.models, user.id);
         }
       },
-    },
+    }
   });
-
-  user.generateUniqueUsername = async function () {
-    let username;
-    do {
-      username = sanitizeUsername(generateRandomName());
-    } while (await user.findOne({ where: { name: username } }));
-    return username;
-  };
-
-  function generateRandomName() {
-    const rng = new RandomNameGenerator(RandomNameGenerator.ROMAN);
-    return rng.compose(3);
-  }
-
-  function sanitizeUsername(username) {
-    let sanitized = username.replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 11);
-    sanitized += Math.floor(1000 + Math.random() * 9000);
-    return sanitized;
-  }
 
   return user;
 };

@@ -19,6 +19,9 @@ const {isOnline}= require("../utils/util");
 // create user
 module.exports.createUser = async (req, res) => {
   try {
+
+    const unique_identifier = uuidv4();
+
     let newUser = {
       address: req.body.address,
       email: req.body.email,
@@ -36,7 +39,7 @@ module.exports.createUser = async (req, res) => {
       telegram_username: req.body.telegram_username,
       whatsapp_country_code: req.body.whatsapp_country_code,
       whatsapp_number: req.body.whatsapp_number,
-      unique_identifier: uuidv4(),
+      unique_identifier: unique_identifier
     };
     const userAlreadyCreated = await models.user.findOne({
       where: {
