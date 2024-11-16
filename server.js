@@ -10,7 +10,7 @@ const https = require('https');
 const { startListeningSolanaEvents } = require("./utils/web3Utils");
 const automaticOrderCancellationCron  = require("./crons/automatic_order_cancellation_cron");
 const balanceFetchCron = require("./crons/automatic_balance_fetch_cron");
-//const {setupAdminJS} = require('./setupadminjs');
+const {setupAdminJS} = require('./setupadminjs');
 
 // Initialize express app
 const app = express();
