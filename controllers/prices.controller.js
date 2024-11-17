@@ -1,3 +1,4 @@
+require("dotenv").config();
 const request = require('request');
 const { promisify } = require('util');
 const requestPromise = promisify(request);
@@ -14,7 +15,7 @@ async function fetchApiData(url) {
       const response = await requestPromise({
         url: url,
         headers: {
-          'x-cg-pro-api-key': 'CG-gXS1ybJ6xXUbGWdpgBH4Yp4C' 
+          'x-cg-pro-api-key': process.env.COIN_GECKO_API_KEY 
         },
         json: true // Automatically parses the JSON response
       });

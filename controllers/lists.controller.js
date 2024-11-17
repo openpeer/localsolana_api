@@ -477,11 +477,8 @@ async function fetchedListLoop(element, banksIds = null) {
     //  console.log("banksIds", banksIds)
     if (banksIds) {
       for (let item of banksIds) {
-        //   console.log("------------bank Id", item)
         let particularBankData = await models.banks.findByPk(item);
-        //   console.log("particularBankData", particularBankData);
-        let data = particularBankData.dataValues; // Extract data values from each record
-        //    console.log("data------------------",data)
+        let data = particularBankData.dataValues;
         banksData.push(data);
       }
     }
