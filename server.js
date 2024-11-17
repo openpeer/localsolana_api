@@ -8,8 +8,8 @@ const expressSession = require('express-session');
 const http = require('http');
 const https = require('https');
 const { startListeningSolanaEvents } = require("./utils/web3Utils");
-const automaticOrderCancellationCron  = require("./crons/automatic_order_cancellation_cron");
-const balanceFetchCron = require("./crons/automatic_balance_fetch_cron");
+//const automaticOrderCancellationCron  = require("./crons/automatic_order_cancellation_cron");
+//const balanceFetchCron = require("./crons/automatic_balance_fetch_cron");
 const {setupAdminJS} = require('./setupadminjs');
 
 // Initialize express app
@@ -56,8 +56,6 @@ const startServer = async () => {
   setupSocketHandlers(io);
   //as soon as the server starts, start listening for our program events.
   startListeningSolanaEvents(io);
-  //start cron every minute for automatic cancellation
-  //automaticOrderCancellationCron();
 
   // Middleware
   app.use(express.json());
@@ -68,11 +66,11 @@ const startServer = async () => {
     res.status(200).send('OK');
   });
 
-  // setupAdminJS(app)
-  // .then(() => {
-  //   console.log("AdminJS setup complete");
-  // })
-  // .catch((err) => console.error("Error setting up AdminJS:", err));
+  setupAdminJS(app)
+  .then(() => {
+    console.log("AdminJS setup complete");
+  })
+  .catch((err) => console.error("Error setting up AdminJS:", err));
 
   // Use API routes
   const createRouter = require('./api/routes/routes');

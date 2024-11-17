@@ -55,7 +55,7 @@ exports.createList = async function (req, res) {
         margin,
         terms,
         automatic_approval,
-        status: 0,
+        status: 1,
         payment_method_id: null,
         type,
         deposit_time_limit,
@@ -613,6 +613,7 @@ exports.fetchListForParticularUser = async (req, res) => {
       order: [["created_at", "DESC"]],
       where: {
         seller_id: user.dataValues.id,
+        status: 1,
       },
     });
     //console.log("listData", listData);

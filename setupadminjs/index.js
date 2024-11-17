@@ -2,52 +2,12 @@ const models = require("../models/index");
 const resource = require('../resources');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
-
-// Conditionally set up AdminJS resources based on user data
-function setupAdminResources(role = 0) {
-  return {
-    resource: models.user,
-    options: {
-      properties: {
-        id: { position: 1 },
-        address: { position: 2 },
-        name: { position: 3 },
-        email: { position: 4 },
-        twitter: { position: 5 },
-        timezone: { position: 6 },
-        password: { isVisible: false },
-        createdAt: { isVisible: false },
-        updatedAt: { isVisible: false },
-      },
-      // actions: {
-      //   new: {
-      //     isAccessible: true,
-      //   },
-      // },
-      parent: { name: null },
-    },
-  };
-  // const resources = [
-  //   resource.user_resource(models.user),
-  //   resource.dispute_resource(models.Dispute),
-  //   resource.order_resource(models.Order),
-  //   resource.bank_resource(models.banks),
-  //   resource.fiat_currencies_resource(models.fiat_currencies),
-  //   resource.list_resource(models.lists),
-  //   resource.dispute_resource(models.tokens),
-  // ];
-
-  // // Only add adminUser resource if role is 1 (admin)
-  // if (role === 1) {
-  //   resources.push(resource.admin_user_resource(models.adminUser));
-  // }
-
-  // return resources;
-}
+const path = require('path');
 
 // Integrate AdminJS
 async function setupAdminJS(app) {
   const AdminJS = (await import("adminjs")).default;
+  const componentLoader = (await import('../components.mjs')).componentLoader;
   const AdminJSExpress = (await import("@adminjs/express")).default;
   const AdminJSSequelize = (await import("@adminjs/sequelize")).default;
 
@@ -58,11 +18,11 @@ async function setupAdminJS(app) {
     Resource: AdminJSSequelize.Resource,
     Database: AdminJSSequelize.Database,
   });
-
+  const bankResource = await resource.bank_resource(models.banks);
   // Session setup
   app.use(
     session({
-      secret: 'your_secret_key',
+      secret: process.env.SESSION_KEY,
       resave: false,
       saveUninitialized: false,
       cookie: { secure: false }
@@ -74,7 +34,7 @@ async function setupAdminJS(app) {
     resources: [
       resource.admin_user_resource(models.adminUsers),
       resource.user_resource(models.user),
-      resource.bank_resource(models.banks),
+      bankResource,
       resource.fiat_currencies_resource(models.fiat_currencies),
       resource.token_resource(models.tokens),
       resource.list_resource(models.lists),
@@ -83,8 +43,9 @@ async function setupAdminJS(app) {
     ],
     rootPath: "/admin",
     branding: { companyName: "Local Solana Admin Panel" },
+    componentLoader:componentLoader
   });
-
+  adminJs.watch();
   // Store user role in session
   const adminRouter = AdminJSExpress.buildAuthenticatedRouter(
     adminJs,
@@ -127,13 +88,13 @@ async function setupAdminJS(app) {
         }
       },
       cookieName: 'adminjs',
-      cookiePassword: 'session_cookie_password',
+      cookiePassword: process.env.SESSION_KEY,
     },
     null,
     {
       resave: false,
       saveUninitialized: false,
-      secret: 'session_secret_key',
+      secret: process.env.SESSION_KEY,
       cookie: {
         httpOnly: true,
         secure: false,
