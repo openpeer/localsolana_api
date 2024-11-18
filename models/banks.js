@@ -17,6 +17,7 @@ module.exports = (sequelize, DataTypes) => {
     name: DataTypes.STRING,
     account_info_schema: DataTypes.JSON,
     color: DataTypes.STRING,
+    image: DataTypes.STRING,
     createdAt: {
       type: DataTypes.DATE,
       field: 'created_at' // Maps to the database column 'created_at'
