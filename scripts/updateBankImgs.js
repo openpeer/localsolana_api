@@ -1,29 +1,17 @@
 const { Sequelize, DataTypes } = require('sequelize');
-require('dotenv').config();
+const fs = require('fs');
+const csv = require('csv-parse');
+require('dotenv').config({ path: '../.env' }); // Look for .env in parent directory
 
-// Initialize Sequelize connection
+// Database configuration from ENV variables
 const sequelize = new Sequelize({
-  host: process.env.DB_HOST || 'localhost',
-  dialect: 'postgres',
+  database: process.env.DB_NAME,
   username: process.env.DB_USERNAME,
   password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-});
-
-// Define the models for active_storage_blobs and banks
-const ActiveStorageBlob = sequelize.define('ActiveStorageBlob', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    allowNull: false,
-  },
-  key: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-}, {
-  tableName: 'active_storage_blobs',
-  timestamps: false,
+  host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 5432,
+  dialect: 'postgres',
+  logging: false // Set to console.log for debugging
 });
 
 const Bank = sequelize.define('Bank', {
@@ -39,56 +27,90 @@ const Bank = sequelize.define('Bank', {
 }, {
   tableName: 'banks',
   timestamps: true,
-  underscored: true, // Correct mapping for snake_case columns
+  underscored: true,
 });
 
-// Function to update image field in banks table with a dry run option
+async function readCSVFile(filePath) {
+  return new Promise((resolve, reject) => {
+    const results = [];
+    fs.createReadStream(filePath)
+      .pipe(csv.parse({ columns: true, delimiter: ',', trim: true }))
+      .on('data', (data) => results.push(data))
+      .on('end', () => resolve(results))
+      .on('error', (error) => reject(error));
+  });
+}
+
 async function updateBankImages(dryRun = false) {
   try {
-    // Fetch all records from active_storage_blobs
-    const blobs = await ActiveStorageBlob.findAll({
-      attributes: ['id', 'key'],
+    // Test database connection
+    await sequelize.authenticate();
+    console.log('Database connection established successfully.');
+    
+    // Log database configuration (without password)
+    console.log('Database config:', {
+      database: process.env.DB_NAME,
+      username: process.env.DB_USERNAME,
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT || 5432
     });
 
-    // Loop through the blobs and simulate or perform the update
-    for (const blob of blobs) {
-      // Find the corresponding bank by matching IDs
-      const bank = await Bank.findOne({ where: { id: blob.id } });
+    // Read CSV files
+    const mappings = await readCSVFile('./data-1731957894463.csv');
+    console.log(`Found ${mappings.length} mappings to process`);
 
-      if (bank) {
-        // Append ".png" to the key value before updating the image field
-        const imageKey = `${blob.key}.png`;
+    // Process each mapping
+    for (const mapping of mappings) {
+      const bankId = parseInt(mapping.bank_id);
+      const imageKey = mapping.image_key;
+      
+      if (!imageKey) {
+        console.log(`No image key found for bank ${bankId}`);
+        continue;
+      }
 
-        if (dryRun) {
-          // Log what would happen without updating the database
-          console.log(`Dry run: Bank ID ${bank.id} would be updated with image key: ${imageKey}`);
-        } else {
-          // Update the bank's image column with the modified key value
-          await bank.update({ image: imageKey });
-          console.log(`Updated bank ID ${bank.id} with image key: ${imageKey}`);
-        }
+      const imageValue = `${imageKey}.png`;
+
+      if (dryRun) {
+        console.log(`Dry run: Would update bank ${bankId} with image: ${imageValue}`);
       } else {
-        console.log(`No bank found for active_storage_blob ID ${blob.id}`);
+        await Bank.update(
+          { image: imageValue },
+          { where: { id: bankId } }
+        );
+        console.log(`Updated bank ${bankId} with image: ${imageValue}`);
       }
     }
 
     console.log('Bank image update process completed.');
   } catch (error) {
-    console.error('Error updating bank images:', error);
+    console.error('Error:', error);
+    throw error;
+  } finally {
+    await sequelize.close();
   }
 }
 
-// Command-line argument parsing
-const args = process.argv.slice(2);  // Get the command-line arguments
-const dryRun = args.includes('--dry-run');  // Check if the dry-run flag is provided
+// Install required package
+console.log('Installing required package...');
+const { execSync } = require('child_process');
+try {
+  execSync('npm install csv-parse', { stdio: 'inherit' });
+} catch (error) {
+  console.error('Failed to install required package. Please run: npm install csv-parse');
+  process.exit(1);
+}
 
-// Run the updateBankImages function with the dryRun flag
+// Command-line argument parsing
+const args = process.argv.slice(2);
+const dryRun = args.includes('--dry-run');
+
 updateBankImages(dryRun)
   .then(() => {
-    console.log(dryRun ? 'Dry run completed, check the console for actions.' : 'Bank images updated successfully!');
-    process.exit(0);  // Exit after completing the process
+    console.log(dryRun ? 'Dry run completed.' : 'Bank images updated successfully!');
+    process.exit(0);
   })
   .catch((err) => {
     console.error('Error:', err);
-    process.exit(1);  // Exit with error code if something goes wrong
+    process.exit(1);
   });
