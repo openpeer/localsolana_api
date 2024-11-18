@@ -60,7 +60,7 @@ class TalkjsUserSyncService {
     return {
       name: user.name,
       email: user.email ? [user.email] : [],
-      photoUrl: user.image_url,
+      photoUrl: user.image_url ? `${process.env.PROFILE_IMAGES_BASE_URL}/${user.image_url}` : '',
       role: 'user'
     };
   }
