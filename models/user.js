@@ -92,10 +92,15 @@ module.exports = (sequelize) => {
         }
       },
       afterSave: async (user, options) => {
-        if (user.changed('name') || user.changed('email') || user.changed('image')) {
-          console.log(`User ${user.id} changed. Triggering TalkjsSyncJob.`);
-          console.log(`Changed fields: ${user.changed().join(', ')}`);
+        const changedFields = user.changed();
+        console.log(`User ${user.id} changed. Checking fields...`);
+        console.log(`Changed fields: ${changedFields ? changedFields.join(', ') : 'None'}`);
+
+        if (user.changed('name') || user.changed('email') || user.changed('image_url')) {
+          console.log(`User ${user.id} has changes in monitored fields. Triggering TalkjsSyncJob.`);
           TalkjsSyncJob.performLater(sequelize.models, user.id);
+        } else {
+          console.log(`No relevant changes detected for user ${user.id}.`);
         }
       },
     }
