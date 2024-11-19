@@ -1,17 +1,18 @@
-require('dotenv').config();
-
-console.log('DATABASE_URL:', process.env.DATABASE_URL);
-
-const axios = require('axios');
 const jwt = require('jsonwebtoken');
+const axios = require('axios');
+const { user: User } = require('../models'); // Adjust the path as necessary
 const { Sequelize } = require('sequelize');
-const models = require('../models'); // Import existing models
+require('dotenv').config(); // Load environment variables from .env file
 
-// Use the existing Sequelize instance from models
-const sequelize = models.sequelize;
+// Load the production configuration
+const config = require('../config/config.js').production;
 
-// Use the existing User model
-const User = models.user;
+// Create a new Sequelize instance using the production configuration
+const sequelize = new Sequelize(config.database, config.username, config.password, {
+  host: config.host,
+  dialect: config.dialect,
+  logging: console.log, // enable logging to see SQL queries
+});
 
 class TalkjsUserSyncService {
   constructor(dryRun = false) {
@@ -28,14 +29,12 @@ class TalkjsUserSyncService {
       iss: this.appId,
       exp: Math.floor(Date.now() / 1000) + 30
     };
-
     const token = jwt.sign(payload, this.secretKey, { algorithm: 'HS256' });
     console.log('Generated JWT token for TalkJS:', token);
     return token;
   }
 
   userPayload(user) {
-    // Ensure email is an array or null
     const email = Array.isArray(user.email)
       ? user.email
       : user.email
@@ -45,7 +44,7 @@ class TalkjsUserSyncService {
     const payload = {
       name: user.name,
       email: email,
-      // photoUrl: user.photoUrl || '', // Mapped from 'image_url'
+      photoUrl: user.image_url ? `${process.env.PROFILE_IMAGES_BASE_URL}/${user.image_url}` : null, // Mapped from 'image_url'
       role: 'user' // Hardcoded to 'user'
     };
     console.log(`Constructed payload for user ID ${user.id}:`, payload);
@@ -63,7 +62,6 @@ class TalkjsUserSyncService {
 
     const token = this.generateToken();
     const url = `${this.baseUrl}/users/${user.id}`;
-
     try {
       const response = await axios.put(url, payload, {
         headers: {
@@ -76,7 +74,6 @@ class TalkjsUserSyncService {
     } catch (error) {
       if (error.response && error.response.status === 404) {
         console.warn(`User ID ${user.id} not found on TalkJS. Attempting to create.`);
-        // User not found, create them
         try {
           const createResponse = await axios.post(`${this.baseUrl}/users`, payload, {
             headers: {
@@ -105,7 +102,6 @@ module.exports = TalkjsUserSyncService;
   try {
     console.log('Script started.');
 
-    // Parse command-line arguments
     const args = process.argv.slice(2);
     const isDryRun = args.includes('--dry-run');
 
@@ -115,16 +111,14 @@ module.exports = TalkjsUserSyncService;
 
     const syncService = new TalkjsUserSyncService(isDryRun);
 
-    // Authenticate and connect to the database
     await sequelize.authenticate();
     console.log('Database connection established.');
 
-    // Fetch users from the database
     const users = await User.findAll({
       where: {
         // Add any filtering criteria if needed
       },
-      attributes: ['id', 'name', 'email'], // Corrected aliasing
+      attributes: ['id', 'name', 'email', 'image_url'], // Ensure 'image_url' is included
     });
 
     console.log(`Found ${users.length} user(s) to sync.`);
@@ -137,8 +131,9 @@ module.exports = TalkjsUserSyncService;
   } catch (error) {
     console.error('An error occurred during the sync process:', error.message);
   } finally {
-    // Close the database connection
-    await sequelize.close();
-    console.log('Database connection closed.');
+    if (sequelize) {
+      await sequelize.close();
+      console.log('Database connection closed.');
+    }
   }
 })();

@@ -40,54 +40,62 @@ exports.createBanks = async function(req, res){
 }
 
 // Read All the banks
-exports.getbanks =  async (req, res) => {
-    try {
-      const banks = await models.banks.findAll();
-      return successResponse(res, Messages.fetchedBanks, banks);
-    } catch (error) {
-      console.error(error);
-      return errorResponse(res, httpCodes.serverError,Messages.systemError);
-    }
-  };
-
-exports.getBanksByCurrency =  async (req, res) => {
+exports.getbanks = async (req, res) => {
   try {
-    const currency_id = req.query.currency_id;
-    console.log("currency_id",currency_id);
-    const bankIds = await models.banks_fiat_currencies.findAll({
-      attributes: ['bank_id'],
-      where: {
-        fiat_currency_id: currency_id
-      }
-    });
-    const fiatCurrency = await models.fiat_currencies.findAll({
-      attributes: ['country_code'],
-      where: {
-        id: currency_id
-      }
-    });
-    console.log("fiatCurrency", fiatCurrency[0].dataValues.country_code);
-    let banksList = [];
-    if(bankIds.length > 0) {
-      
-      for (const bankId of bankIds) {
-        let particularBanks = await models.banks.findOne({
-          where: {
-            id: bankId.bank_id
-          }
-        });
-        particularBanks.dataValues["icon"] = fiatCurrency[0].dataValues.country_code;
-        banksList.push(particularBanks);
-    }
-  }else{
-    return errorResponse(res, httpCodes.badReq,Messages.noBanksFound);
+    const banks = await models.banks.findAll();
+    const BANK_IMAGES_BASE_URL = process.env.BANK_IMAGES_BASE_URL;
+    console.log('BANK_IMAGES_BASE_URL:', BANK_IMAGES_BASE_URL);
 
-  }
-    console.log("banks Ids", banksList);
-    
-    return successResponse(res, Messages.fetchedBanks,banksList);
+    const banksWithImageUrl = banks.map(bank => {
+      console.log('Bank image:', bank.image);
+      if (bank.image) {
+        bank.dataValues.imageUrl = `${BANK_IMAGES_BASE_URL}/${bank.image}`;
+      } else {
+        bank.dataValues.imageUrl = null;
+      }
+      return bank;
+    });
+
+    return successResponse(res, Messages.fetchedBanks, banksWithImageUrl);
   } catch (error) {
     console.error(error);
-    return errorResponse(res, httpCodes.serverError,Messages.systemError);
+    return errorResponse(res, httpCodes.serverError, Messages.systemError);
   }
 };
+  exports.getBanksByCurrency = async (req, res) => {
+    try {
+      const currency_id = req.query.currency_id;
+      if (!currency_id) {
+        return errorResponse(res, httpCodes.badReq, "currency_id is required");
+      }
+  
+      const bankIds = await models.banks_fiat_currencies.findAll({
+        attributes: ['bank_id'],
+        where: {
+          fiat_currency_id: currency_id
+        }
+      });
+  
+      const BANK_IMAGES_BASE_URL = process.env.BANK_IMAGES_BASE_URL;
+  
+      let banksList = [];
+      if (bankIds.length > 0) {
+        for (const bankId of bankIds) {
+          let particularBanks = await models.banks.findOne({
+            where: {
+              id: bankId.bank_id
+            }
+          });
+          particularBanks.dataValues["icon"] = `${BANK_IMAGES_BASE_URL}/${particularBanks.image}`;
+          banksList.push(particularBanks);
+        }
+      } else {
+        return errorResponse(res, httpCodes.badReq, Messages.noBanksFound);
+      }
+  
+      return successResponse(res, Messages.fetchedBanks, banksList);
+    } catch (error) {
+      console.error(error);
+      return errorResponse(res, httpCodes.serverError, Messages.systemError);
+    }
+  };
