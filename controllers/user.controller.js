@@ -155,6 +155,7 @@ exports.updateUser = async (req, res) => {
   const { address } = req.params;
   console.log("req.body", req.body);
   try {
+    // Fetch the user instance
     const user = await models.user.findOne({
       where: {
         address: address,
@@ -166,25 +167,21 @@ exports.updateUser = async (req, res) => {
 
     const { user_profile } = req.body; // Extract user_profile from req.body
 
-    const [affectedRows, [updatedUser]] = await models.user.update(
-      { ...user_profile }, // Spread user_profile instead of req.body
-      {
-        where: {
-          address: address,
-        },
-        returning: true,
-      }
-    );
-    console.log("user", updatedUser);
+    // Use the instance method to update the user
+    const updatedUser = await user.update({ ...user_profile });
+
+    console.log("Updated user:", updatedUser);
+
     if (user_profile.email && user_profile.name) {
       await identifyUser(user.address, {
         name: user_profile.name,
         email: user_profile.email,
       });
     }
+
     return successResponse(res, Messages.userUpdated, updatedUser);
   } catch (error) {
-    console.error(error);
+    console.error("Error updating user:", error);
     return errorResponse(res, httpCodes.serverError, Messages.systemError);
   }
 };

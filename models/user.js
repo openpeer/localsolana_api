@@ -101,7 +101,7 @@ module.exports = (sequelize) => {
         console.error('Error in TalkjsSyncJob after create:', error);
       }
     },
-    afterUpdate: async (user) => {
+    afterUpdate: async (user, options) => {
       try {
         console.log('Running TalkjsSyncJob after update for user:', user.id);
         await TalkjsSyncJob.perform(sequelize.models, user.id);
