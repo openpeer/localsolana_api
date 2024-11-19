@@ -1,5 +1,3 @@
-// services/talkjsUserSyncService.js
-
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
 
@@ -14,85 +12,45 @@ class TalkjsUserSyncService {
     const token = this.generateToken();
     const url = `${this.baseUrl}/users/${user.id}`;
     const payload = this.userPayload(user);
-  
+
     console.log(`Constructed payload for user ID ${user.id}:`, payload);
-  
-    try {
-      const response = await axios.put(url, payload, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      console.log(`Successfully synced user ID ${user.id}:`, response.data);
-      return response.data;
-    } catch (error) {
-      console.error(`Failed to sync user ${user.id}:`, error.response ? error.response.data : error.message);
-  
-      if (error.response) {
-        console.error('Status:', error.response.status);
-        console.error('Headers:', error.response.headers);
-        console.error('Data:', JSON.stringify(error.response.data, null, 2));
-      } else {
-        console.error('Error Message:', error.message);
-      }
-  
-      throw new Error(`Failed to sync user ${user.id}: ${error.response ? JSON.stringify(error.response.data) : error.message}`);
-    }
-  }
-  
-
-  async batchSyncUsers(users) {
-    const token = this.generateToken();
-    const url = `${this.baseUrl}/users`;
-    const payload = users.reduce((acc, user) => {
-      acc[user.id.toString()] = this.userPayload(user);
-      return acc;
-    }, {});
-
-    console.log(`Constructed batch payload for users:`, payload);
 
     try {
       const response = await axios.put(url, payload, {
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
+          'Authorization': `Bearer ${token}`,
+        },
       });
-      console.log(`Successfully batch synced users:`, response.data);
-      return response.data;
+      console.log(`User synced successfully: ${response.data}`);
     } catch (error) {
-      console.error(`Failed to batch sync users: ${error.response ? error.response.data : error.message}`);
-      throw new Error(`Failed to batch sync users: ${error.response ? error.response.data : error.message}`);
-    }
-  }
-
-  async syncAllUsers(batchSize = 100) {
-    const users = await models.user.findAll({ limit: batchSize });
-    for (const user of users) {
-      await this.syncUser(user);
+      console.error(`Failed to sync user ${user.id}:`, error.response?.data || error.message);
+      throw error;
     }
   }
 
   userPayload(user) {
-    return {
-      name: user.name,
+    const payload = {
+      name: user.name || 'Anonymous',
       email: user.email ? [user.email] : [],
-      photoUrl: user.image_url ? `${process.env.PROFILE_IMAGES_BASE_URL}/${user.image_url}` : null,
-      role: 'user'
+      role: 'user',
     };
+
+    if (user.image_url) {
+      payload.photoUrl = `${process.env.PROFILE_IMAGES_BASE_URL}/${user.image_url}`;
+    }
+
+    return payload;
   }
 
   generateToken() {
     const payload = {
       tokenType: 'app',
       iss: this.appId,
-      exp: Math.floor(Date.now() / 1000) + 3600
+      exp: Math.floor(Date.now() / 1000) + 300,
     };
 
-    const token = jwt.sign(payload, this.secretKey, { algorithm: 'HS256' });
-    // console.log('Generated JWT token for TalkJS:', token);
-    return token;
+    return jwt.sign(payload, this.secretKey, { algorithm: 'HS256' });
   }
 }
 

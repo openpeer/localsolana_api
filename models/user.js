@@ -94,21 +94,21 @@ module.exports = (sequelize) => {
         }
       },
       afterCreate: async (user, options) => {
-        try {
-          console.log('Running TalkjsSyncJob after create for user:', user.id);
-          await TalkjsSyncJob.perform(sequelize.models, user.id);
-        } catch (error) {
-          console.error('Error in TalkjsSyncJob after create:', error);
-        }
-      },
-      afterUpdate: async (user, options) => {
-        try {
-          console.log('Running TalkjsSyncJob after update for user:', user.id);
-          await TalkjsSyncJob.perform(sequelize.models, user.id);
-        } catch (error) {
-          console.error('Error in TalkjsSyncJob after update:', error);
-        }
-      },
+      try {
+        console.log('Running TalkjsSyncJob after create for user:', user.id);
+        await TalkjsSyncJob.perform(sequelize.models, user.id);
+      } catch (error) {
+        console.error('Error in TalkjsSyncJob after create:', error);
+      }
+    },
+    afterUpdate: async (user) => {
+      try {
+        console.log('Running TalkjsSyncJob after update for user:', user.id);
+        await TalkjsSyncJob.perform(sequelize.models, user.id);
+      } catch (error) {
+        console.error('Error in TalkjsSyncJob after update:', error);
+      }
+    },
     }
   });
 
