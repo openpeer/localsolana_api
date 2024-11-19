@@ -10,21 +10,35 @@ class TalkjsUserSyncService {
 
   async syncUser(user) {
     const token = this.generateToken();
-    const url = `${this.baseUrl}/users/${user.id}`;
+    // Convert ID to string to ensure consistency
+    const talkjsUserId = String(user.id);
+    const url = `${this.baseUrl}/users/${talkjsUserId}`;
     const payload = this.userPayload(user);
-
-    console.log(`Constructed payload for user ID ${user.id}:`, payload);
-
+  
+    console.log(`Syncing user ${talkjsUserId} with payload:`, payload);
+  
     try {
       const response = await axios.put(url, payload, {
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+          'Authorization': `Bearer ${token}`
+        }
       });
-      console.log(`User synced successfully: ${response.data}`);
+      return response.data;
     } catch (error) {
-      console.error(`Failed to sync user ${user.id}:`, error.response?.data || error.message);
+      if (error.response?.status === 404) {
+        // If user doesn't exist, create a new one
+        const createResponse = await axios.post(`${this.baseUrl}/users`, {
+          id: talkjsUserId,
+          ...payload
+        }, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        return createResponse.data;
+      }
       throw error;
     }
   }
