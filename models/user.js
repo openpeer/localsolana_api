@@ -92,11 +92,17 @@ module.exports = (sequelize) => {
         }
       },
       afterSave: async (user, options) => {
-        const changedFields = user.changed();
-        console.log(`User ${user.id} changed. Checking fields...`);
-        console.log(`Changed fields: ${changedFields ? changedFields.join(', ') : 'None'}`);
+        const previousValues = user._previousDataValues;
+        const currentValues = user.dataValues;
 
-        if (changedFields && (changedFields.includes('name') || changedFields.includes('email') || changedFields.includes('image_url'))) {
+        console.log(`User ${user.id} changed. Checking fields...`);
+        console.log(`Previous values: ${JSON.stringify(previousValues)}`);
+        console.log(`Current values: ${JSON.stringify(currentValues)}`);
+
+        const fieldsToCheck = ['name', 'email', 'image_url'];
+        const hasRelevantChanges = fieldsToCheck.some(field => previousValues[field] !== currentValues[field]);
+
+        if (hasRelevantChanges) {
           console.log(`User ${user.id} has changes in monitored fields. Triggering TalkjsSyncJob.`);
           TalkjsSyncJob.performLater(sequelize.models, user.id);
         } else {
