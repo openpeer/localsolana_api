@@ -1,3 +1,5 @@
+// services/talkjsUserSyncService.js
+
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
 
@@ -12,9 +14,9 @@ class TalkjsUserSyncService {
     const token = this.generateToken();
     const url = `${this.baseUrl}/users/${user.id}`;
     const payload = this.userPayload(user);
-
+  
     console.log(`Constructed payload for user ID ${user.id}:`, payload);
-
+  
     try {
       const response = await axios.put(url, payload, {
         headers: {
@@ -25,10 +27,20 @@ class TalkjsUserSyncService {
       console.log(`Successfully synced user ID ${user.id}:`, response.data);
       return response.data;
     } catch (error) {
-      console.error(`Failed to sync user ${user.id}: ${error.response ? error.response.data : error.message}`);
-      throw new Error(`Failed to sync user ${user.id}: ${error.response ? error.response.data : error.message}`);
+      console.error(`Failed to sync user ${user.id}:`, error.response ? error.response.data : error.message);
+  
+      if (error.response) {
+        console.error('Status:', error.response.status);
+        console.error('Headers:', error.response.headers);
+        console.error('Data:', JSON.stringify(error.response.data, null, 2));
+      } else {
+        console.error('Error Message:', error.message);
+      }
+  
+      throw new Error(`Failed to sync user ${user.id}: ${error.response ? JSON.stringify(error.response.data) : error.message}`);
     }
   }
+  
 
   async batchSyncUsers(users) {
     const token = this.generateToken();
@@ -66,7 +78,7 @@ class TalkjsUserSyncService {
     return {
       name: user.name,
       email: user.email ? [user.email] : [],
-      photoUrl: user.image_url ? `${process.env.PROFILE_IMAGES_BASE_URL}/${user.image_url}` : '',
+      photoUrl: user.image_url ? `${process.env.PROFILE_IMAGES_BASE_URL}/${user.image_url}` : null,
       role: 'user'
     };
   }
@@ -75,11 +87,11 @@ class TalkjsUserSyncService {
     const payload = {
       tokenType: 'app',
       iss: this.appId,
-      exp: Math.floor(Date.now() / 1000) + 30
+      exp: Math.floor(Date.now() / 1000) + 3600
     };
 
     const token = jwt.sign(payload, this.secretKey, { algorithm: 'HS256' });
-    console.log('Generated JWT token for TalkJS:', token);
+    // console.log('Generated JWT token for TalkJS:', token);
     return token;
   }
 }

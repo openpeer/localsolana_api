@@ -1,3 +1,5 @@
+// models/user.js
+
 'use strict';
 const {
   Model, DataTypes
@@ -89,7 +91,22 @@ module.exports = (sequelize) => {
           if (!user.name) {
             user.name = await user.constructor.generateUniqueUsername();
           }
-          TalkjsSyncJob.perform(sequelize.models, user.id);
+        }
+      },
+      afterCreate: async (user, options) => {
+        try {
+          console.log('Running TalkjsSyncJob after create for user:', user.id);
+          await TalkjsSyncJob.perform(sequelize.models, user.id);
+        } catch (error) {
+          console.error('Error in TalkjsSyncJob after create:', error);
+        }
+      },
+      afterUpdate: async (user, options) => {
+        try {
+          console.log('Running TalkjsSyncJob after update for user:', user.id);
+          await TalkjsSyncJob.perform(sequelize.models, user.id);
+        } catch (error) {
+          console.error('Error in TalkjsSyncJob after update:', error);
         }
       },
     }

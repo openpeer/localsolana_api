@@ -1,3 +1,5 @@
+// controllers/user.controller.js
+
 const models = require("../models/index");
 const { errorResponse, successResponse } = require("../utils/rest");
 const Messages = require("../utils/messages");
