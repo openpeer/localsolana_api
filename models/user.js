@@ -20,16 +20,16 @@ module.exports = (sequelize) => {
 
     static async generateUniqueUsername() {
       let username;
-      do {
-        username = uniqueNamesGenerator({
-          dictionaries: [colors, animals],
-          separator: '_',
-          length: 2,
-        }) + Math.floor(1000 + Math.random() * 9000);
-      } while (await user.findOne({ where: { name: username } }));
+      let isUnique = false;
+      while (!isUnique) {
+        username = uniqueNamesGenerator({ dictionaries: [colors, animals] });
+        const existingUser = await this.findOne({ where: { name: username } });
+        if (!existingUser) {
+          isUnique = true;
+        }
+      }
       return username;
     }
-
   }
   
   user.init({
@@ -91,11 +91,11 @@ module.exports = (sequelize) => {
           }
         }
       },
-      afterSave: async (user, options) => {
+      beforeUpdate: async (user, options) => {
         const previousValues = user._previousDataValues;
         const currentValues = user.dataValues;
 
-        console.log(`User ${user.id} changed. Checking fields...`);
+        console.log(`User ${user.id} is being updated. Checking fields...`);
         console.log(`Previous values: ${JSON.stringify(previousValues)}`);
         console.log(`Current values: ${JSON.stringify(currentValues)}`);
 
