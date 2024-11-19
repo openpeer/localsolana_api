@@ -91,7 +91,7 @@ module.exports = (sequelize) => {
           }
         }
       },
-      beforeUpdate: async (user, options) => {
+      beforeSave: async (user, options) => {
         console.log(`User ${user.id} is being updated. Triggering TalkjsSyncJob.`);
         TalkjsSyncJob.perform(sequelize.models, user.id);
       },
