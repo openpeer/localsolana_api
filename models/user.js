@@ -96,7 +96,7 @@ module.exports = (sequelize) => {
         console.log(`User ${user.id} changed. Checking fields...`);
         console.log(`Changed fields: ${changedFields ? changedFields.join(', ') : 'None'}`);
 
-        if (user.changed('name') || user.changed('email') || user.changed('image_url')) {
+        if (changedFields && (changedFields.includes('name') || changedFields.includes('email') || changedFields.includes('image_url'))) {
           console.log(`User ${user.id} has changes in monitored fields. Triggering TalkjsSyncJob.`);
           TalkjsSyncJob.performLater(sequelize.models, user.id);
         } else {
