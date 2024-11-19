@@ -8,10 +8,11 @@ const expressSession = require('express-session');
 const http = require('http');
 const https = require('https');
 const { startListeningSolanaEvents } = require("./utils/web3Utils");
-//const automaticOrderCancellationCron  = require("./crons/automatic_order_cancellation_cron");
-//const balanceFetchCron = require("./crons/automatic_balance_fetch_cron");
+const automaticOrderCancellationCron  = require("./crons/automatic_order_cancellation_cron");
+const balanceFetchCron = require("./crons/automatic_balance_fetch_cron");
 const AutomaticPriceFetchCron = require("./crons/automatic_price_fetch_cron");
-const {setupAdminJS} = require('./setupadminjs');
+//const {setupAdminJS} = require('./setupadminjs');
+const {cache} = require('./utils/cache');
 
 // Initialize express app
 const app = express();
@@ -67,11 +68,11 @@ const startServer = async () => {
     res.status(200).send('OK');
   });
 
-  setupAdminJS(app)
-  .then(() => {
-    console.log("AdminJS setup complete");
-  })
-  .catch((err) => console.error("Error setting up AdminJS:", err));
+  // setupAdminJS(app)
+  // .then(() => {
+  //   console.log("AdminJS setup complete");
+  // })
+  // .catch((err) => console.error("Error setting up AdminJS:", err));
 
   // Use API routes
   const createRouter = require('./api/routes/routes');
@@ -89,6 +90,19 @@ const startServer = async () => {
     console.log(`Environment: ${process.env.NODE_ENV}`);
     console.log(`Database host: ${process.env.DB_HOST}`);
   });
+
+  const priceCron = new AutomaticPriceFetchCron();
+  priceCron.startCron();
+
+    const keys = cache.keys();
+    if (keys.length > 0) {
+      console.log('Cache has values:', keys);
+    } else {
+      console.log('Cache is empty. Running PriceFetch Once');
+      priceCron.fetchTokenPrices();
+      
+    }
+ 
 };
 
 // Start the application
@@ -96,6 +110,3 @@ startServer().catch(error => {
   console.error('Failed to start server:', error);
   process.exit(1);
 });
-
-const priceCron = new AutomaticPriceFetchCron();
-priceCron.startCron();

@@ -8,6 +8,7 @@ const { QueryTypes, where, and } = require("sequelize");
 const { min } = require("moment");
 const { Op } = require("sequelize");
 const {isOnline} = require("../utils/util");
+const {getCachedPrice} = require('../utils/cache');
 
 // method for adding the fiat currencies
 exports.createList = async function (req, res) {
@@ -555,15 +556,26 @@ async function fetchedListLoop(element, banksIds = null) {
       //console.log("userData", userData);
     }
 
-    // console.log("list", list);
-    console.log();
+    //added logic for handling floating rate changes
+    let calculatedPrice = element.dataValues.price;
+    if(element.dataValues.margin_type ==1){
+      console.log("floating rate for",tokenData.dataValues.coingecko_id,fiatCurrencyData.dataValues.code)
+      let price = getCachedPrice(tokenData.dataValues.coingecko_id, fiatCurrencyData.dataValues.code);
+      console.log('Cached Price:',price);
+      let margin = element.dataValues.margin;
+      let total = price + (price * margin) / 100;
+      calculatedPrice = total;
+      console.log('Calculated Price:',calculatedPrice);
+    }
+
+
     let response = {
       id: element.dataValues.id,
       automatic_approval: element.dataValues.automatic_approval,
       chain_id: element.dataValues.chain_id,
       limit_min: element.dataValues.limit_min,
       limit_max: element.dataValues.limit_max,
-      price: element.dataValues.price,
+      price: calculatedPrice,
       margin_type: element.dataValues.margin_type,
       margin: element.dataValues.margin,
       status: element.dataValues.status,

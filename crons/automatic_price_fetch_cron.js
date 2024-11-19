@@ -1,12 +1,11 @@
 const axios = require("axios");
 const cron = require("node-cron");
-const NodeCache = require("node-cache");
+const {cache} = require('../utils/cache');
 require("dotenv").config();
 const models = require("../models");
 
 class AutomaticPriceFetcher {
   constructor() {
-    this.cache = new NodeCache({ stdTTL: 3600 }); // Cache expires in 1 hour
     this.baseUrl = "https://pro-api.coingecko.com/api/v3/simple/price";
   }
 
@@ -17,22 +16,7 @@ class AutomaticPriceFetcher {
     console.log("Starting price fetching cron job...");
     cron.schedule("0 * * * *", async () => {
       console.log("Fetching token prices...");
-      const tokens = await models.tokens.findAll({
-        attributes: ["coingecko_id"],
-      });
-      const currencies = await models.fiat_currencies.findAll({
-        attributes: ["code"],
-      });
-      const ids = [];
-      for (let i = 0; i < tokens.length; i++) {
-        ids.push(tokens[i].coingecko_id);
-      }
-      const currencyIds = [];
-      for (let i = 0; i < currencies.length; i++) {
-        currencyIds.push(currencies[i].code.toLowerCase());
-      }
-      console.log('Fetching price for ' + currencyIds.join(','),'for tokens',ids);
-      await this.fetchTokenPrices(ids, currencyIds);
+      await this.fetchTokenPrices();
     });
   }
 
@@ -41,7 +25,22 @@ class AutomaticPriceFetcher {
    * @param {Array<string>} ids - Array of coin IDs (e.g., ['bitcoin', 'ethereum']).
    * @param {Array<string>} currencies - Array of currencies (e.g., ['usd', 'eur']).
    */
-  async fetchTokenPrices(ids, currencies) {
+  async fetchTokenPrices() {
+    const tokens = await models.tokens.findAll({
+        attributes: ["coingecko_id"],
+      });
+      const currencyCodes = await models.fiat_currencies.findAll({
+        attributes: ["code"],
+      });
+      const ids = [];
+      for (let i = 0; i < tokens.length; i++) {
+        ids.push(tokens[i].coingecko_id);
+      }
+      const currencies = [];
+      for (let i = 0; i < currencyCodes.length; i++) {
+        currencies.push(currencyCodes[i].code.toLowerCase());
+      }
+      console.log('Fetching price for ' + currencies.join(','),'for tokens',ids);
     const idsParam = ids.join(",");
     const currenciesParam = currencies.join(",");
 
@@ -56,13 +55,14 @@ class AutomaticPriceFetcher {
 
       if (response.status === 200) {
         const prices = response.data;
+        console.log('prices',prices);
 
         // Cache each coin-currency pair
         Object.keys(prices).forEach((coin) => {
           Object.keys(prices[coin]).forEach((currency) => {
             const cacheKey = `prices/${coin}/${currency}`;
-            this.cache.set(cacheKey, prices[coin][currency]);
-            console.log(`Cached ${cacheKey}: ${prices[coin][currency]}`);
+            cache.set(cacheKey, prices[coin][currency]);
+            //console.log(`Cached ${cacheKey}: ${prices[coin][currency]}`);
           });
         });
       }
@@ -71,15 +71,33 @@ class AutomaticPriceFetcher {
     }
   }
 
-  /**
-   * Fetches cached token prices.
-   * @param {string} id - The coin ID (e.g., 'bitcoin').
-   * @param {string} currency - The currency (e.g., 'usd').
-   * @returns {number|null} - The cached price or null if not found.
-   */
-  getCachedPrice(id, currency) {
-    const cacheKey = `prices/${id}/${currency}`;
-    return this.cache.get(cacheKey) || null;
+  async fetchSingleTokenPrice(id,currency) {
+
+    try {
+      const response = await axios.get(this.baseUrl, {
+        params: { ids: id, vs_currencies: currency },
+        headers: {
+          accept: "application/json",
+          "x-cg-pro-api-key": process.env.COINGECKO_API_KEY,
+        },
+      });
+
+      if (response.status === 200) {
+        const prices = response.data;
+        console.log('prices',prices);
+
+        // Cache each coin-currency pair
+        Object.keys(prices).forEach((coin) => {
+          Object.keys(prices[coin]).forEach((currency) => {
+            const cacheKey = `prices/${coin}/${currency}`;
+            cache.set(cacheKey, prices[coin][currency]);
+            //console.log(`Cached ${cacheKey}: ${prices[coin][currency]}`);
+          });
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching token prices:", error.message);
+    }
   }
 }
 
