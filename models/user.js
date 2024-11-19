@@ -89,11 +89,8 @@ module.exports = (sequelize) => {
           if (!user.name) {
             user.name = await user.constructor.generateUniqueUsername();
           }
+          TalkjsSyncJob.perform(sequelize.models, user.id);
         }
-      },
-      beforeSave: async (user, options) => {
-        console.log(`User ${user.id} is being updated. Triggering TalkjsSyncJob.`);
-        TalkjsSyncJob.perform(sequelize.models, user.id);
       },
     }
   });
