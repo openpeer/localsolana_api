@@ -91,6 +91,7 @@ const startServer = async () => {
     console.log(`Database host: ${process.env.DB_HOST}`);
   });
 
+  // Fetch Prices once so that cache is not empty when server is started
   const priceCron = new AutomaticPriceFetchCron();
   priceCron.startCron();
 
