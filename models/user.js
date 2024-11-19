@@ -93,6 +93,8 @@ module.exports = (sequelize) => {
       },
       afterSave: async (user, options) => {
         if (user.changed('name') || user.changed('email') || user.changed('image')) {
+          console.log(`User ${user.id} changed. Triggering TalkjsSyncJob.`);
+          console.log(`Changed fields: ${user.changed().join(', ')}`);
           TalkjsSyncJob.performLater(sequelize.models, user.id);
         }
       },

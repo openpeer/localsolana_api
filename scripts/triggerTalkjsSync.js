@@ -23,6 +23,7 @@ const sequelize = new Sequelize(config.database, config.username, config.passwor
       console.error('Please provide a new name as an argument.');
       process.exit(1);
     }
+    console.log(`New name provided: ${newName}`);
 
     // Authenticate and connect to the database
     await sequelize.authenticate();
@@ -30,6 +31,7 @@ const sequelize = new Sequelize(config.database, config.username, config.passwor
 
     // Fetch a test user from the database
     const testUserId = 1; // Replace with a valid user ID for testing
+    console.log(`Fetching user with ID ${testUserId}...`);
     const user = await User.findByPk(testUserId);
 
     if (!user) {
@@ -40,6 +42,7 @@ const sequelize = new Sequelize(config.database, config.username, config.passwor
     console.log(`Fetched user: ${JSON.stringify(user.dataValues, null, 2)}`);
 
     // Update the user's name
+    console.log(`Updating user name to: ${newName}`);
     user.name = newName;
     await user.save();
     console.log(`Updated user name to: ${newName}`);
@@ -48,6 +51,7 @@ const sequelize = new Sequelize(config.database, config.username, config.passwor
     const syncService = new TalkjsUserSyncService();
 
     // Sync the user with TalkJS
+    console.log('Starting TalkJS sync...');
     const result = await syncService.syncUser(user);
     console.log('Sync result:', result);
 

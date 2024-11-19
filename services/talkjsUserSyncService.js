@@ -13,6 +13,8 @@ class TalkjsUserSyncService {
     const url = `${this.baseUrl}/users/${user.id}`;
     const payload = this.userPayload(user);
 
+    console.log(`Constructed payload for user ID ${user.id}:`, payload);
+
     try {
       const response = await axios.put(url, payload, {
         headers: {
@@ -20,10 +22,11 @@ class TalkjsUserSyncService {
           'Authorization': `Bearer ${token}`
         }
       });
+      console.log(`Successfully synced user ID ${user.id}:`, response.data);
       return response.data;
     } catch (error) {
-      console.error(`Failed to sync user ${user.id}: ${error.response.data}`);
-      throw new Error(`Failed to sync user ${user.id}: ${error.response.data}`);
+      console.error(`Failed to sync user ${user.id}: ${error.response ? error.response.data : error.message}`);
+      throw new Error(`Failed to sync user ${user.id}: ${error.response ? error.response.data : error.message}`);
     }
   }
 
@@ -35,6 +38,8 @@ class TalkjsUserSyncService {
       return acc;
     }, {});
 
+    console.log(`Constructed batch payload for users:`, payload);
+
     try {
       const response = await axios.put(url, payload, {
         headers: {
@@ -42,10 +47,11 @@ class TalkjsUserSyncService {
           'Authorization': `Bearer ${token}`
         }
       });
+      console.log(`Successfully batch synced users:`, response.data);
       return response.data;
     } catch (error) {
-      console.error(`Failed to batch sync users: ${error.response.data}`);
-      throw new Error(`Failed to batch sync users: ${error.response.data}`);
+      console.error(`Failed to batch sync users: ${error.response ? error.response.data : error.message}`);
+      throw new Error(`Failed to batch sync users: ${error.response ? error.response.data : error.message}`);
     }
   }
 
@@ -72,7 +78,9 @@ class TalkjsUserSyncService {
       exp: Math.floor(Date.now() / 1000) + 30
     };
 
-    return jwt.sign(payload, this.secretKey, { algorithm: 'HS256' });
+    const token = jwt.sign(payload, this.secretKey, { algorithm: 'HS256' });
+    console.log('Generated JWT token for TalkJS:', token);
+    return token;
   }
 }
 
