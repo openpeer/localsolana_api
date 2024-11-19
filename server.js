@@ -10,7 +10,9 @@ const https = require('https');
 const { startListeningSolanaEvents } = require("./utils/web3Utils");
 const automaticOrderCancellationCron  = require("./crons/automatic_order_cancellation_cron");
 const balanceFetchCron = require("./crons/automatic_balance_fetch_cron");
+const AutomaticPriceFetchCron = require("./crons/automatic_price_fetch_cron");
 //const {setupAdminJS} = require('./setupadminjs');
+const {cache} = require('./utils/cache');
 
 // Initialize express app
 const app = express();
@@ -56,8 +58,6 @@ const startServer = async () => {
   setupSocketHandlers(io);
   //as soon as the server starts, start listening for our program events.
   startListeningSolanaEvents(io);
-  //start cron every minute for automatic cancellation
-  //automaticOrderCancellationCron();
 
   // Middleware
   app.use(express.json());
@@ -90,6 +90,20 @@ const startServer = async () => {
     console.log(`Environment: ${process.env.NODE_ENV}`);
     console.log(`Database host: ${process.env.DB_HOST}`);
   });
+
+  // Fetch Prices once so that cache is not empty when server is started
+  const priceCron = new AutomaticPriceFetchCron();
+  priceCron.startCron();
+
+    const keys = cache.keys();
+    if (keys.length > 0) {
+      console.log('Cache has values:', keys);
+    } else {
+      console.log('Cache is empty. Running PriceFetch Once');
+      priceCron.fetchTokenPrices();
+      
+    }
+ 
 };
 
 // Start the application

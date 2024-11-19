@@ -8,7 +8,7 @@ const Messages = require('../utils/messages');
 const httpCodes = require('../utils/httpCodes');
 const priceSourceMethod = require('../utils/commonEnums');
 const { Op } = require('sequelize');
-
+const {getCachedPrice} = require('../utils/cache');
 
 exports.quickBuy =  async (req, res) => {
   try{
@@ -72,7 +72,6 @@ exports.quickBuy =  async (req, res) => {
         // Push the fetched result to the output array
         output.push(fetchedResult);
       }
-        //}
             else{
             }
           }
@@ -149,15 +148,25 @@ async function fetchedListLoop(element, banksIds = null) {
       //console.log("userData", userData); 
     }
     
-   // console.log("list", list);
-    //console.log("element -----------------", element);
+    //added logic for handling floating rate changes
+    let calculatedPrice = element.dataValues.price;
+    if(element.margin_type ==1){
+      console.log("floating rate for",tokenData.dataValues.coingecko_id,fiatCurrencyData.dataValues.code)
+      let price = getCachedPrice(tokenData.dataValues.coingecko_id, fiatCurrencyData.dataValues.code);
+      console.log('Cached Price:',price);
+      let margin = element.margin;
+      let total = price + (price * margin) / 100;
+      calculatedPrice = total;
+      console.log('Calculated Price:',calculatedPrice);
+    }
+
     let response = {
       id: element.id, 
       automatic_approval : element.automatic_approval,
       chain_id : element.chain_id,
       limit_min: element.limit_min,
       limit_max: element.limit_max,
-      price:element.price,
+      price:calculatedPrice,
       margin_type: element.margin_type,
       margin: element.margin,
       status: element.status,
