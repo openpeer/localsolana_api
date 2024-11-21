@@ -539,6 +539,9 @@ async function fetchedListLoop(element, banksIds = null) {
       element.dataValues.seller_id !== null
     ) {
       userData = await models.user.findByPk(element.dataValues.seller_id);
+      if(!userData){
+        console.log("User not found for ", element.dataValues.seller_id);
+      }
       let contracts = await models.contracts.findAll({
         where: {
           user_id: element.dataValues.seller_id,
@@ -563,7 +566,7 @@ async function fetchedListLoop(element, banksIds = null) {
       let price = getCachedPrice(tokenData.dataValues.coingecko_id, fiatCurrencyData.dataValues.code);
       console.log('Cached Price:',price);
       let margin = element.dataValues.margin;
-      let total = price + (price * margin) / 100;
+      let total = price - (price * margin) / 100;
       calculatedPrice = total;
       console.log('Calculated Price:',calculatedPrice);
     }
