@@ -43,29 +43,42 @@ exports.quickBuy = async (req, res) => {
     }
 
     if (fiat_amount && fiat_amount > 0) {
-      whereConditions.price = { [Op.gte]: fiat_amount };
+      //whereConditions.price = { [Op.gte]: fiat_amount };
   
-    whereConditions[Op.or] = [
-      {
-        [Op.and]: [
-          { limit_min: { [Op.gte]: fiat_amount } },
-          { limit_max: { [Op.lte]: fiat_amount } },
-        ],
-      },
-      {
-        [Op.and]: [
-          { limit_min: { [Op.is]: null } },
-          { limit_max: { [Op.is]: null } },
-        ],
-      },
-    ];
+      if (fiat_amount && fiat_amount > 0) {
+        let token_price = getCachedPrice(token.dataValues.coingecko_id,fiat_currency_code);
+        whereConditions[Op.and] = [
+          {
+            price: {
+              [Op.gte]: sequelize.literal(`
+                ${fiat_amount} / (CASE 
+                  WHEN margin_type = 0 THEN margin
+                  ELSE (${token_price} + (${token_price} * margin / 100))
+                END)
+              `)
+            }
+          },
+          {
+            [Op.or]: [
+              { limit_min: { [Op.lte]: fiat_amount } },
+              { limit_min: { [Op.is]: null } },
+            ],
+          },
+          {
+            [Op.or]: [
+              { limit_max: { [Op.gte]: fiat_amount } },
+              { limit_max: { [Op.is]: null } },
+            ],
+          },
+        ];
+      }
   }
     console.log('Where confitions are:'.whereConditions);
 
     // Fetch the results
     let results = await models.lists.findAll({
       where: whereConditions,
-      order: [['price', 'ASC']],
+     // order: [['price', 'ASC']],
     });
   
     if (!results) return successResponse(res, "No result found", []);

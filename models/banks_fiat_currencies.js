@@ -19,6 +19,7 @@ module.exports = (sequelize, DataTypes) => {
   }, {
     sequelize,
     modelName: 'banks_fiat_currencies',
+    timestamps: false
   });
   return banks_fiat_currencies;
 };

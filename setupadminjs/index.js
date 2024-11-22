@@ -5,7 +5,7 @@ const session = require('express-session');
 const path = require('path');
 
 // Integrate AdminJS
-async function setupAdminJS(app) {
+async function setupAdminJS(app, sessionStore) {
   const AdminJS = (await import("adminjs")).default;
   const componentLoader = (await import('../components.mjs')).componentLoader;
   const AdminJSExpress = (await import("@adminjs/express")).default;
@@ -18,16 +18,8 @@ async function setupAdminJS(app) {
     Resource: AdminJSSequelize.Resource,
     Database: AdminJSSequelize.Database,
   });
-  const bankResource = await resource.bank_resource(models.banks);
-  // Session setup
-  app.use(
-    session({
-      secret: process.env.SESSION_KEY,
-      resave: false,
-      saveUninitialized: false,
-      cookie: { secure: false }
-    })
-  );
+  const bankResource = await resource.bank_resource(models.banks, models.fiat_currencies, models.banks_fiat_currencies);
+  const disputeResource=await resource.dispute_resource(models.Dispute, models.user_disputes, models.dispute_files, models.Order);
 
   // Initialize AdminJS with no resources
   const adminJs = new AdminJS({
@@ -39,13 +31,16 @@ async function setupAdminJS(app) {
       resource.token_resource(models.tokens),
       resource.list_resource(models.lists),
       resource.order_resource(models.Order),
-      resource.dispute_resource(models.Dispute),
+      disputeResource,
     ],
     rootPath: "/admin",
     branding: { companyName: "Local Solana Admin Panel" },
     componentLoader:componentLoader
   });
   adminJs.watch();
+
+  // show with authentication
+  
   // Store user role in session
   const adminRouter = AdminJSExpress.buildAuthenticatedRouter(
     adminJs,
@@ -92,18 +87,27 @@ async function setupAdminJS(app) {
     },
     null,
     {
+      store: sessionStore, // Use the same session store
       resave: false,
       saveUninitialized: false,
       secret: process.env.SESSION_KEY,
       cookie: {
         httpOnly: true,
         secure: false,
+        maxAge: 24 * 60 * 60 * 1000, // 1 day
+        sameSite: 'strict'
       },
       name: 'adminjs'
     }
   );
 
   app.use(adminJs.options.rootPath, adminRouter);
+
+
+  // show without authentication
+  // const adminRouter = AdminJSExpress.buildRouter(adminJs);
+  // app.use(adminJs.options.rootPath, adminRouter);
+
 }
 
 module.exports = { setupAdminJS };

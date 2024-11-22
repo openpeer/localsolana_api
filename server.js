@@ -4,14 +4,14 @@ const port = process.env.PORT || 3000;
 const express = require('express');
 const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
-const expressSession = require('express-session');
+const session = require('express-session');
 const http = require('http');
 const https = require('https');
 const { startListeningSolanaEvents } = require("./utils/web3Utils");
 const automaticOrderCancellationCron  = require("./crons/automatic_order_cancellation_cron");
 const balanceFetchCron = require("./crons/automatic_balance_fetch_cron");
 const AutomaticPriceFetchCron = require("./crons/automatic_price_fetch_cron");
-//const {setupAdminJS} = require('./setupadminjs');
+const {setupAdminJS} = require('./setupadminjs');
 const {cache} = require('./utils/cache');
 
 // Initialize express app
@@ -19,6 +19,9 @@ const app = express();
 
 // Database connection check
 const { sq: sequelize } = require('./config/database');
+const connectSessionSequelize = require('connect-session-sequelize')(session.Store);
+
+
 
 const startServer = async () => {
   try {
@@ -29,6 +32,15 @@ const startServer = async () => {
     console.error("Warning: Database connection failed:", error);
     // Continue anyway - your app might have routes that don't need DB
   }
+
+  const sessionStore = new connectSessionSequelize({
+    db: sequelize,
+    tableName: 'sessions', // Explicit table name
+    expiration: 24 * 60 * 60 * 1000, // Session expiration (1 day)
+    checkExpirationInterval: 15 * 60 * 1000, // Clean up expired sessions every 15 mins
+  });
+
+  sessionStore.sync();
 
   let server;
   let url;
@@ -68,11 +80,11 @@ const startServer = async () => {
     res.status(200).send('OK');
   });
 
-  // setupAdminJS(app)
-  // .then(() => {
-  //   console.log("AdminJS setup complete");
-  // })
-  // .catch((err) => console.error("Error setting up AdminJS:", err));
+  setupAdminJS(app,sessionStore)
+  .then(() => {
+    console.log("AdminJS setup complete");
+  })
+  .catch((err) => console.error("Error setting up AdminJS:", err));
 
   // Use API routes
   const createRouter = require('./api/routes/routes');
