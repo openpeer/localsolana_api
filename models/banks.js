@@ -11,6 +11,12 @@ module.exports = (sequelize, DataTypes) => {
      */
     static associate(models) {
       // define association here
+      banks.belongsToMany(models.fiat_currencies, {
+        through: models.banks_fiat_currencies,
+        foreignKey: 'bank_id',
+        otherKey: 'fiat_currency_id',
+        as: 'fiatCurrencies'
+      });
     }
   }
   banks.init({
