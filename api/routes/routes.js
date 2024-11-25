@@ -102,6 +102,16 @@ const createRouter = (io) => {
     // Telegram webhook
     router.post('/telegram/webhook', telegramController.webhook);
 
+    // Solana webhook
+    router.post('/solana/webhook', async (req, res) => {
+        try {
+        await handleHeliusWebhook(req, res);
+        } catch (error) {
+        console.error("Error handling webhook:", error); 
+        res.status(500).send("Internal Server Error");
+        }
+    });
+
     router.get('/testingCron', ordersController.testingCronJob);
     return router;
 }
