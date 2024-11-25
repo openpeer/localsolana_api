@@ -55,7 +55,6 @@ const setupWebhook = async (apiKey, programId, webhookUrl) => {
   return webhookData;
 };
 
-
 exports.startListeningSolanaEvents = async function (io) {
   const apiKey = process.env.HELIUS_API_KEY;
   const programId = new PublicKey(process.env.LOCALSOLANA_PROGRAM_ID);
@@ -81,64 +80,68 @@ exports.handleHeliusWebhook = async (req, res) => {
   const logs = req.body;
 
   if (!logs || !Array.isArray(logs)) {
+    console.error("Invalid logs format:", logs);
     return res.status(400).send("Invalid log format");
   }
 
   for (const logObj of logs) {
     try {
-      // Access the logs array from the object
-      for (const logStr of logObj.logs) {
-        const PROGRAM_DATA = "Program data:";
-        if (!logStr.includes(PROGRAM_DATA)) continue;
+      if (Array.isArray(logObj.logs)) {
+        for (const logStr of logObj.logs) {
+          const PROGRAM_DATA = "Program data:";
+          if (!logStr.includes(PROGRAM_DATA)) continue;
 
-        const programDataStr = logStr.slice(logStr.indexOf(PROGRAM_DATA) + PROGRAM_DATA.length).trim();
-        const event = eventCoder.decode(programDataStr);
+          const programDataStr = logStr.slice(logStr.indexOf(PROGRAM_DATA) + PROGRAM_DATA.length).trim();
+          const event = eventCoder.decode(programDataStr);
 
-        if (!event) {
-          console.error("Failed to decode event:", programDataStr);
-          continue;
+          if (!event) {
+            console.error("Failed to decode event:", programDataStr);
+            continue;
+          }
+
+          console.log("Event Captured:", event);
+
+          let status;
+          let notificationType;
+
+          switch (event.name) {
+            case "EscrowCreated":
+              status = 1;
+              notificationType = NotificationWorker.SELLER_ESCROWED;
+              break;
+            case "SellerCancelDisabled":
+              status = 2;
+              notificationType = NotificationWorker.BUYER_PAID;
+              break;
+            case "Released":
+              status = 5;
+              notificationType = NotificationWorker.SELLER_RELEASED;
+              break;
+            case "DisputeOpened":
+              status = 4;
+              notificationType = NotificationWorker.DISPUTE_OPENED;
+              break;
+            case "DisputeResolved":
+              status = 2;
+              notificationType = NotificationWorker.DISPUTE_RESOLVED;
+              break;
+          }
+
+          if (status) {
+            await updateOrderSilently(event.data.order_id, status, io);
+            console.log("Order Updated:", event.data.order_id, status);
+          }
+
+          if (notificationType) {
+            await new NotificationWorker().perform(notificationType, event.data.order_id);
+            console.log("Notification Sent:", notificationType);
+          }
         }
-
-        console.log("Event Captured:", event);
-
-        let status;
-        let notificationType;
-
-        switch (event.name) {
-          case "EscrowCreated":
-            status = 1;
-            notificationType = NotificationWorker.SELLER_ESCROWED;
-            break;
-          case "SellerCancelDisabled":
-            status = 2;
-            notificationType = NotificationWorker.BUYER_PAID;
-            break;
-          case "Released":
-            status = 5;
-            notificationType = NotificationWorker.SELLER_RELEASED;
-            break;
-          case "DisputeOpened":
-            status = 4;
-            notificationType = NotificationWorker.DISPUTE_OPENED;
-            break;
-          case "DisputeResolved":
-            status = 2;
-            notificationType = NotificationWorker.DISPUTE_RESOLVED;
-            break;
-        }
-
-        if (status) {
-          await updateOrderSilently(event.data.order_id, status, io);
-          console.log("Order Updated:", event.data.order_id, status);
-        }
-
-        if (notificationType) {
-          await new NotificationWorker().perform(notificationType, event.data.order_id);
-          console.log("Notification Sent:", notificationType);
-        }
+      } else {
+        console.error("logObj.logs is not iterable or missing:", logObj);
       }
     } catch (error) {
-      console.error("Error processing log:", error);
+      console.error("Error processing logObj:", error, logObj);
     }
   }
 
