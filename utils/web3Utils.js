@@ -10,8 +10,15 @@ const { Helius } = require("helius-sdk");
 const fetch = require('node-fetch');
 
 const setupWebhook = async (apiKey, programId, webhookUrl) => {
-  // First check existing webhooks
+  // First, check existing webhooks
   const checkResponse = await fetch(`https://api.helius.xyz/v0/webhooks?api-key=${apiKey}`);
+  
+  if (!checkResponse.ok) {
+    const error = await checkResponse.text();
+    console.error('❌ Failed to fetch existing webhooks:', error);
+    throw new Error(error);
+  }
+
   const existingWebhooks = await checkResponse.json();
   
   const existing = existingWebhooks.find(w => 
@@ -24,21 +31,30 @@ const setupWebhook = async (apiKey, programId, webhookUrl) => {
     return existing;
   }
 
-  // Create new webhook if none exists
+  // Create a new webhook if none exists
   const response = await fetch(`https://api.helius.xyz/v0/webhooks?api-key=${apiKey}`, {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       webhookURL: webhookUrl,
       accountAddresses: [programId],
-      webhookType: "enhanced",
-      transactionTypes: ["Any"],
-      authHeader: process.env.HELIUS_WEBHOOK_SECRET
-    })
+      webhookType: 'enhanced',
+      transactionTypes: ['Any'],
+      authHeader: `Bearer ${process.env.HELIUS_WEBHOOK_SECRET}`, // Use Bearer prefix here
+    }),
   });
 
-  return response.json();
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('❌ Failed to set up webhook:', error);
+    throw new Error(error);
+  }
+
+  const webhookData = await response.json();
+  console.log('✅ Webhook set up successfully:', webhookData);
+  return webhookData;
 };
+
 
 exports.startListeningSolanaEvents = async function (io) {
   const apiKey = process.env.HELIUS_API_KEY;

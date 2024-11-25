@@ -1,22 +1,24 @@
 // middleware/webhookAuth.js
-
-// Environment variable for your webhook secret
 const HELIUS_WEBHOOK_SECRET = process.env.HELIUS_WEBHOOK_SECRET;
 
-// Middleware to authenticate Helius webhooks
 const authenticateWebhook = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  // Ensure Authorization header exists
+  if (!authHeader) {
+    console.error('❌ Authorization header missing');
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const token = authHeader.split(' ')[1];
+  const token = authHeader.split(' ')[1] || authHeader;
 
+  // Check token validity
   if (token !== HELIUS_WEBHOOK_SECRET) {
+    console.error('❌ Invalid authorization token');
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
+  console.log('✅ Webhook authenticated successfully');
   next();
 };
 
