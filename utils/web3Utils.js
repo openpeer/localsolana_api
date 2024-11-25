@@ -79,6 +79,7 @@ exports.handleHeliusWebhook = async (req, res) => {
   const eventCoder = new coder.BorshEventCoder(idl);
   const logs = req.body;
 
+  // Validate logs format at the beginning
   if (!logs || !Array.isArray(logs)) {
     console.error("Invalid logs format:", logs);
     return res.status(400).send("Invalid log format");
@@ -86,59 +87,61 @@ exports.handleHeliusWebhook = async (req, res) => {
 
   for (const logObj of logs) {
     try {
-      if (Array.isArray(logObj.logs)) {
-        for (const logStr of logObj.logs) {
-          const PROGRAM_DATA = "Program data:";
-          if (!logStr.includes(PROGRAM_DATA)) continue;
-
-          const programDataStr = logStr.slice(logStr.indexOf(PROGRAM_DATA) + PROGRAM_DATA.length).trim();
-          const event = eventCoder.decode(programDataStr);
-
-          if (!event) {
-            console.error("Failed to decode event:", programDataStr);
-            continue;
-          }
-
-          console.log("Event Captured:", event);
-
-          let status;
-          let notificationType;
-
-          switch (event.name) {
-            case "EscrowCreated":
-              status = 1;
-              notificationType = NotificationWorker.SELLER_ESCROWED;
-              break;
-            case "SellerCancelDisabled":
-              status = 2;
-              notificationType = NotificationWorker.BUYER_PAID;
-              break;
-            case "Released":
-              status = 5;
-              notificationType = NotificationWorker.SELLER_RELEASED;
-              break;
-            case "DisputeOpened":
-              status = 4;
-              notificationType = NotificationWorker.DISPUTE_OPENED;
-              break;
-            case "DisputeResolved":
-              status = 2;
-              notificationType = NotificationWorker.DISPUTE_RESOLVED;
-              break;
-          }
-
-          if (status) {
-            await updateOrderSilently(event.data.order_id, status, io);
-            console.log("Order Updated:", event.data.order_id, status);
-          }
-
-          if (notificationType) {
-            await new NotificationWorker().perform(notificationType, event.data.order_id);
-            console.log("Notification Sent:", notificationType);
-          }
-        }
-      } else {
+      // Check if logs field exists and is an array
+      if (!logObj.logs || !Array.isArray(logObj.logs)) {
         console.error("logObj.logs is not iterable or missing:", logObj);
+        continue; // Skip this logObj and move to the next
+      }
+
+      for (const logStr of logObj.logs) {
+        const PROGRAM_DATA = "Program data:";
+        if (!logStr.includes(PROGRAM_DATA)) continue;
+
+        const programDataStr = logStr.slice(logStr.indexOf(PROGRAM_DATA) + PROGRAM_DATA.length).trim();
+        const event = eventCoder.decode(programDataStr);
+
+        if (!event) {
+          console.error("Failed to decode event:", programDataStr);
+          continue;
+        }
+
+        console.log("Event Captured:", event);
+
+        let status;
+        let notificationType;
+
+        switch (event.name) {
+          case "EscrowCreated":
+            status = 1;
+            notificationType = NotificationWorker.SELLER_ESCROWED;
+            break;
+          case "SellerCancelDisabled":
+            status = 2;
+            notificationType = NotificationWorker.BUYER_PAID;
+            break;
+          case "Released":
+            status = 5;
+            notificationType = NotificationWorker.SELLER_RELEASED;
+            break;
+          case "DisputeOpened":
+            status = 4;
+            notificationType = NotificationWorker.DISPUTE_OPENED;
+            break;
+          case "DisputeResolved":
+            status = 2;
+            notificationType = NotificationWorker.DISPUTE_RESOLVED;
+            break;
+        }
+
+        if (status) {
+          await updateOrderSilently(event.data.order_id, status, io);
+          console.log("Order Updated:", event.data.order_id, status);
+        }
+
+        if (notificationType) {
+          await new NotificationWorker().perform(notificationType, event.data.order_id);
+          console.log("Notification Sent:", notificationType);
+        }
       }
     } catch (error) {
       console.error("Error processing logObj:", error, logObj);
@@ -147,3 +150,4 @@ exports.handleHeliusWebhook = async (req, res) => {
 
   res.status(200).send("Logs processed successfully");
 };
+
