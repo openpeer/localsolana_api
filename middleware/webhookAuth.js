@@ -1,5 +1,4 @@
 // middleware/webhookAuth.js
-
 const crypto = require('crypto');
 
 const webhookAuthMiddleware = (req, res, next) => {
@@ -15,9 +14,12 @@ const webhookAuthMiddleware = (req, res, next) => {
   }
 
   try {
-    const [bearer, token] = authHeader.split(' ');
+    // Allow both "Bearer <token>" and plain token format
+    const token = authHeader.startsWith('Bearer ') 
+      ? authHeader.split(' ')[1] 
+      : authHeader;
     
-    if (bearer !== 'Bearer' || !token) {
+    if (!token) {
       return res.status(401).send('Invalid auth format');
     }
 
@@ -27,7 +29,11 @@ const webhookAuthMiddleware = (req, res, next) => {
       .update(JSON.stringify(req.body))
       .digest('hex');
 
+    console.log('Expected signature:', signature);
+    console.log('Received token:', token);
+
     if (token !== signature) {
+      console.log('Signature mismatch');
       return res.status(401).send('Invalid signature');
     }
 
