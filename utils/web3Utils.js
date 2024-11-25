@@ -6,53 +6,44 @@ const coder = require("@coral-xyz/anchor/dist/cjs/coder");
 const idl = require("../idl/local_solana_migrate.json");
 const { updateOrderSilently } = require("../controllers/orders.controller");
 const NotificationWorker = require("../workers/notificationWorker");
-const { Helius } = require("helius-sdk");
 const fetch = require('node-fetch');
 
 const setupWebhook = async (apiKey, programId, webhookUrl) => {
-  // First, check existing webhooks
-  const checkResponse = await fetch(`https://api.helius.xyz/v0/webhooks?api-key=${apiKey}`);
-  
-  if (!checkResponse.ok) {
-    const error = await checkResponse.text();
-    console.error('❌ Failed to fetch existing webhooks:', error);
-    throw new Error(error);
+  try {
+    const checkResponse = await fetch(`https://api.helius.xyz/v0/webhooks?api-key=${apiKey}`);
+    if (!checkResponse.ok) throw new Error(await checkResponse.text());
+
+    const existingWebhooks = await checkResponse.json();
+    const existing = existingWebhooks.find(w =>
+      w.webhookURL === webhookUrl && w.accountAddresses.includes(programId)
+    );
+
+    if (existing) {
+      console.log(`Using existing webhook: ${existing.webhookID}`);
+      return existing;
+    }
+
+    const response = await fetch(`https://api.helius.xyz/v0/webhooks?api-key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        webhookURL: webhookUrl,
+        accountAddresses: [programId],
+        webhookType: 'enhanced',
+        transactionTypes: ['Any'],
+        authHeader: `Bearer ${process.env.HELIUS_WEBHOOK_SECRET}`,
+      }),
+    });
+
+    if (!response.ok) throw new Error(await response.text());
+
+    const webhookData = await response.json();
+    console.log('✅ Webhook set up successfully:', webhookData);
+    return webhookData;
+  } catch (error) {
+    console.error('❌ Error setting up webhook:', error);
+    throw error;
   }
-
-  const existingWebhooks = await checkResponse.json();
-  
-  const existing = existingWebhooks.find(w => 
-    w.webhookURL === webhookUrl && 
-    w.accountAddresses.includes(programId)
-  );
-
-  if (existing) {
-    console.log(`Using existing webhook: ${existing.webhookID}`);
-    return existing;
-  }
-
-  // Create a new webhook if none exists
-  const response = await fetch(`https://api.helius.xyz/v0/webhooks?api-key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      webhookURL: webhookUrl,
-      accountAddresses: [programId],
-      webhookType: 'enhanced',
-      transactionTypes: ['Any'],
-      authHeader: `Bearer ${process.env.HELIUS_WEBHOOK_SECRET}`, // Use Bearer prefix here
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    console.error('❌ Failed to set up webhook:', error);
-    throw new Error(error);
-  }
-
-  const webhookData = await response.json();
-  console.log('✅ Webhook set up successfully:', webhookData);
-  return webhookData;
 };
 
 exports.startListeningSolanaEvents = async function (io) {
@@ -62,9 +53,7 @@ exports.startListeningSolanaEvents = async function (io) {
   console.log("Initializing Solana program event monitoring via Helius...");
 
   const webhookUrl = process.env.HELIUS_WEBHOOK_URL;
-  if (!webhookUrl) {
-    throw new Error("HELIUS_WEBHOOK_URL not configured");
-  }
+  if (!webhookUrl) throw new Error("HELIUS_WEBHOOK_URL not configured");
 
   try {
     const webhook = await setupWebhook(apiKey, programId.toBase58(), webhookUrl);
@@ -79,7 +68,6 @@ exports.handleHeliusWebhook = async (req, res) => {
   const eventCoder = new coder.BorshEventCoder(idl);
   const logs = req.body;
 
-  // Validate logs format at the beginning
   if (!logs || !Array.isArray(logs)) {
     console.error("Invalid logs format:", logs);
     return res.status(400).send("Invalid log format");
@@ -87,10 +75,9 @@ exports.handleHeliusWebhook = async (req, res) => {
 
   for (const logObj of logs) {
     try {
-      // Check if logs field exists and is an array
       if (!logObj.logs || !Array.isArray(logObj.logs)) {
-        console.error("logObj.logs is not iterable or missing:", logObj);
-        continue; // Skip this logObj and move to the next
+        console.error("logObj.logs is not iterable or missing:", JSON.stringify(logObj, null, 2));
+        continue; // Skip invalid log objects
       }
 
       for (const logStr of logObj.logs) {
@@ -98,10 +85,17 @@ exports.handleHeliusWebhook = async (req, res) => {
         if (!logStr.includes(PROGRAM_DATA)) continue;
 
         const programDataStr = logStr.slice(logStr.indexOf(PROGRAM_DATA) + PROGRAM_DATA.length).trim();
-        const event = eventCoder.decode(programDataStr);
+        let event;
+
+        try {
+          event = eventCoder.decode(programDataStr);
+        } catch (decodeError) {
+          console.error("Failed to decode event:", programDataStr, decodeError);
+          continue;
+        }
 
         if (!event) {
-          console.error("Failed to decode event:", programDataStr);
+          console.error("No event decoded from:", programDataStr);
           continue;
         }
 
@@ -131,23 +125,32 @@ exports.handleHeliusWebhook = async (req, res) => {
             status = 2;
             notificationType = NotificationWorker.DISPUTE_RESOLVED;
             break;
+          default:
+            console.log("Unhandled event type:", event.name);
         }
 
         if (status) {
-          await updateOrderSilently(event.data.order_id, status, io);
-          console.log("Order Updated:", event.data.order_id, status);
+          try {
+            await updateOrderSilently(event.data.order_id, status, io);
+            console.log("Order Updated:", event.data.order_id, status);
+          } catch (updateError) {
+            console.error("Error updating order:", event.data.order_id, updateError);
+          }
         }
 
         if (notificationType) {
-          await new NotificationWorker().perform(notificationType, event.data.order_id);
-          console.log("Notification Sent:", notificationType);
+          try {
+            await new NotificationWorker().perform(notificationType, event.data.order_id);
+            console.log("Notification Sent:", notificationType);
+          } catch (notificationError) {
+            console.error("Error sending notification:", notificationType, notificationError);
+          }
         }
       }
     } catch (error) {
-      console.error("Error processing logObj:", error, logObj);
+      console.error("Error processing logObj:", JSON.stringify(logObj, null, 2), error);
     }
   }
 
   res.status(200).send("Logs processed successfully");
 };
-
