@@ -7,94 +7,118 @@ const idl = require("../idl/local_solana_migrate.json");
 const { updateOrderSilently } = require("../controllers/orders.controller");
 const NotificationWorker = require("../workers/notificationWorker");
 const { Helius } = require("helius-sdk");
+const fetch = require('node-fetch');
 
-exports.startListeningSolanaEvents = function (io) {
-  const helius = new Helius(process.env.HELIUS_API_KEY);
-  const programId = new PublicKey(process.env.LOCALSOLANA_PROGRAM_ID);
+const setupWebhook = async (apiKey, programId, webhookUrl) => {
+  // First check existing webhooks
+  const checkResponse = await fetch(`https://api.helius.xyz/v0/webhooks?api-key=${apiKey}`);
+  const existingWebhooks = await checkResponse.json();
+  
+  const existing = existingWebhooks.find(w => 
+    w.webhookURL === webhookUrl && 
+    w.accountAddresses.includes(programId)
+  );
 
-  console.log("Server is now listening to Solana program events via Helius:");
-
-  // Validate webhook URL
-  const webhookUrl = process.env.HELIUS_WEBHOOK_URL;
-  if (!webhookUrl) {
-    throw new Error("HELIUS_WEBHOOK_URL is not configured in the environment");
+  if (existing) {
+    console.log(`Using existing webhook: ${existing.webhookID}`);
+    return existing;
   }
 
-  // Register a Helius webhook for program logs
-  helius
-    .streamProgramLogs({
-      programId: programId.toBase58(),
-      webhookUrl: webhookUrl,
+  // Create new webhook if none exists
+  const response = await fetch(`https://api.helius.xyz/v0/webhooks?api-key=${apiKey}`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      webhookURL: webhookUrl,
+      accountAddresses: [programId],
+      webhookType: "enhanced",
+      transactionTypes: ["Any"],
+      authHeader: process.env.HELIUS_WEBHOOK_SECRET
     })
-    .then(() => {
-      console.log(`Helius webhook successfully set up for program: ${programId.toBase58()}`);
-    })
-    .catch((error) => {
-      console.error("Error setting up Helius webhook:", error.message);
-    });
+  });
+
+  return response.json();
 };
 
-// Example webhook endpoint for handling logs (to be added in your server file)
-exports.handleHeliusWebhook = async (req, res) => {
-  const eventCoder = new coder.BorshEventCoder(idl);
-  const logs = req.body; // Assuming logs are sent in the body of the request
+exports.startListeningSolanaEvents = async function (io) {
+  const apiKey = process.env.HELIUS_API_KEY;
+  const programId = new PublicKey(process.env.LOCALSOLANA_PROGRAM_ID);
 
-  if (!logs || !Array.isArray(logs)) {
-    res.status(400).send("Invalid log format");
-    return;
+  console.log("Initializing Solana program event monitoring via Helius...");
+
+  const webhookUrl = process.env.HELIUS_WEBHOOK_URL;
+  if (!webhookUrl) {
+    throw new Error("HELIUS_WEBHOOK_URL not configured");
   }
 
-  for (const log of logs) {
+  try {
+    const webhook = await setupWebhook(apiKey, programId.toBase58(), webhookUrl);
+    console.log(`Helius webhook configured successfully. ID: ${webhook.webhookID}`);
+  } catch (error) {
+    console.error("Failed to initialize Helius webhook:", error);
+    throw error;
+  }
+};
+
+exports.handleHeliusWebhook = async (req, res) => {
+  const eventCoder = new coder.BorshEventCoder(idl);
+  const logs = req.body;
+
+  if (!logs || !Array.isArray(logs)) {
+    return res.status(400).send("Invalid log format");
+  }
+
+  for (const logObj of logs) {
     try {
-      const PROGRAM_DATA = "Program data:";
-      const PROGRAM_DATA_START_INDEX = PROGRAM_DATA.length;
+      // Access the logs array from the object
+      for (const logStr of logObj.logs) {
+        const PROGRAM_DATA = "Program data:";
+        if (!logStr.includes(PROGRAM_DATA)) continue;
 
-      if (log.startsWith(PROGRAM_DATA)) {
-        const logStr = log.slice(PROGRAM_DATA_START_INDEX);
-        const event = eventCoder.decode(logStr);
+        const programDataStr = logStr.slice(logStr.indexOf(PROGRAM_DATA) + PROGRAM_DATA.length).trim();
+        const event = eventCoder.decode(programDataStr);
 
-        if (event) {
-          console.log("Event Captured:", event);
+        if (!event) {
+          console.error("Failed to decode event:", programDataStr);
+          continue;
+        }
 
-          let status;
-          let notificationType;
+        console.log("Event Captured:", event);
 
-          switch (event.name) {
-            case "EscrowCreated":
-              status = 1;
-              notificationType = NotificationWorker.SELLER_ESCROWED;
-              break;
-            case "SellerCancelDisabled":
-              status = 2;
-              notificationType = NotificationWorker.BUYER_PAID;
-              break;
-            case "Released":
-              status = 5;
-              notificationType = NotificationWorker.SELLER_RELEASED;
-              break;
-            case "DisputeOpened":
-              status = 4;
-              notificationType = NotificationWorker.DISPUTE_OPENED;
-              break;
-            case "DisputeResolved":
-              status = 2;
-              notificationType = NotificationWorker.DISPUTE_RESOLVED;
-              break;
-            default:
-              break;
-          }
+        let status;
+        let notificationType;
 
-          if (status) {
-            await updateOrderSilently(event.data.order_id, status, io);
-            console.log("Order Updated Silently:", event.data.order_id, status);
-          }
+        switch (event.name) {
+          case "EscrowCreated":
+            status = 1;
+            notificationType = NotificationWorker.SELLER_ESCROWED;
+            break;
+          case "SellerCancelDisabled":
+            status = 2;
+            notificationType = NotificationWorker.BUYER_PAID;
+            break;
+          case "Released":
+            status = 5;
+            notificationType = NotificationWorker.SELLER_RELEASED;
+            break;
+          case "DisputeOpened":
+            status = 4;
+            notificationType = NotificationWorker.DISPUTE_OPENED;
+            break;
+          case "DisputeResolved":
+            status = 2;
+            notificationType = NotificationWorker.DISPUTE_RESOLVED;
+            break;
+        }
 
-          if (notificationType) {
-            await new NotificationWorker().perform(notificationType, event.data.order_id);
-            console.log("Notification Sent:", notificationType);
-          }
-        } else {
-          console.error("Failed to decode event:", logStr);
+        if (status) {
+          await updateOrderSilently(event.data.order_id, status, io);
+          console.log("Order Updated:", event.data.order_id, status);
+        }
+
+        if (notificationType) {
+          await new NotificationWorker().perform(notificationType, event.data.order_id);
+          console.log("Notification Sent:", notificationType);
         }
       }
     } catch (error) {
