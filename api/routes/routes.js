@@ -1,3 +1,5 @@
+// api/routes/routes.js
+
 const express = require('express');
 const adminController = require('../../controllers/admin.controller');
 const userController = require('../../controllers/user.controller');
@@ -14,6 +16,8 @@ const pricesController = require('../../controllers/prices.controller');
 const quickBuyController = require('../../controllers/quickBuy.controller');
 const telegramController = require('../../controllers/telegram.controller');
 const { authenticateToken } = require('../../middlewares/auth.middleware'); // Correct import
+const webhookAuthMiddleware = require('../../middleware/webhookAuth');
+const { handleHeliusWebhook } = require('../../utils/web3Utils');
 
 const createRouter = (io) => {
     const router = express.Router();
@@ -101,16 +105,20 @@ const createRouter = (io) => {
 
     // Telegram webhook
     router.post('/telegram/webhook', telegramController.webhook);
-
-    // Solana webhook
-    router.post('/solana/webhook', async (req, res) => {
+    
+    // Solana webhook with authentication
+    router.post('/solana/webhook', 
+      webhookAuthMiddleware,
+      async (req, res) => {
         try {
-        await handleHeliusWebhook(req, res);
+        console.log("Processing webhook after auth:", JSON.stringify(req.body, null, 2));
+          await handleHeliusWebhook(req, res);
         } catch (error) {
-        console.error("Error handling webhook:", error); 
-        res.status(500).send("Internal Server Error");
+          console.error("Error handling webhook:", error);
+          res.status(500).send("Internal Server Error");
         }
-    });
+      }
+    );
 
     router.get('/testingCron', ordersController.testingCronJob);
     return router;
