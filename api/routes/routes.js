@@ -17,6 +17,7 @@ const quickBuyController = require('../../controllers/quickBuy.controller');
 const telegramController = require('../../controllers/telegram.controller');
 const { authenticateToken } = require('../../middlewares/auth.middleware'); // Correct import
 const webhookAuthMiddleware = require('../../middleware/webhookAuth');
+const { debugMiddleware } = require('../../middleware/webhookDebug');
 const { handleHeliusWebhook } = require('../../utils/web3Utils');
 
 const createRouter = (io) => {
@@ -107,7 +108,8 @@ const createRouter = (io) => {
     router.post('/telegram/webhook', telegramController.webhook);
     
     // Solana webhook with authentication
-    router.post('/solana/webhook', 
+    router.post('/solana/webhook',
+        debugMiddleware,
       webhookAuthMiddleware,
       async (req, res) => {
         try {
