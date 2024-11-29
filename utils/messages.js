@@ -49,5 +49,7 @@ module.exports = {
     noPaymentMethods : 'No Payment Methods has been found',
     noDataFound: 'No data found', 
     orderUpdated: 'Order has been updated successfully',
-    orderCanceled: 'Order cannot be canceled'
+    orderCanceled: 'Order cannot be canceled',
+    notAuthorized: "You're not authorized to access this order",
+    missingData: 'Some data was missing in request',
 };
