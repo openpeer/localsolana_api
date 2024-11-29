@@ -82,7 +82,7 @@ const startServer = async () => {
 
   setupAdminJS(app,sessionStore)
   .then(() => {
-    console.log("AdminJS setup complete");
+    console.log("AdminJS setup complete"); 
   })
   .catch((err) => console.error("Error setting up AdminJS:", err));
 
