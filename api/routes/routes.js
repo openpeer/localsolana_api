@@ -15,6 +15,7 @@ const paymentMethods = require('../../controllers/paymentMethods.controller');
 const pricesController = require('../../controllers/prices.controller');
 const quickBuyController = require('../../controllers/quickBuy.controller');
 const telegramController = require('../../controllers/telegram.controller');
+const shyftController = require('../../controllers/shyft.controller');
 const { authenticateToken } = require('../../middlewares/auth.middleware'); // Correct import
 const webhookAuthMiddleware = require('../../middleware/webhookAuth');
 const { debugMiddleware } = require('../../middleware/webhookDebug');
@@ -122,7 +123,8 @@ const createRouter = (io) => {
       }
     );
 
-    router.get('/testingCron', ordersController.testingCronJob);
+    // transaction processing via shyft
+    router.post('/processTransaction',authenticateToken, shyftController.processTransaction);
     return router;
 }
 
