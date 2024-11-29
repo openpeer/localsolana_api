@@ -1,3 +1,5 @@
+// server.js
+
 require('dotenv').config();
 const fs = require('fs');
 const port = process.env.PORT || 3000; 
@@ -8,9 +10,10 @@ const session = require('express-session');
 const http = require('http');
 const https = require('https');
 const { startListeningSolanaEvents } = require("./utils/web3Utils");
-const automaticOrderCancellationCron  = require("./crons/automatic_order_cancellation_cron");
+const automaticOrderCancellationCron = require("./crons/automatic_order_cancellation_cron");
 const balanceFetchCron = require("./crons/automatic_balance_fetch_cron");
 const AutomaticPriceFetchCron = require("./crons/automatic_price_fetch_cron");
+const AutomaticBinancePriceFetcher = require("./crons/automatic_binance_price_fetch_cron");
 const {setupAdminJS} = require('./setupadminjs');
 const {cache} = require('./utils/cache');
 
@@ -20,8 +23,6 @@ const app = express();
 // Database connection check
 const { sq: sequelize } = require('./config/database');
 const connectSessionSequelize = require('connect-session-sequelize')(session.Store);
-
-
 
 const startServer = async () => {
   try {
@@ -103,19 +104,27 @@ const startServer = async () => {
     console.log(`Database host: ${process.env.DB_HOST}`);
   });
 
-  // Fetch Prices once so that cache is not empty when server is started
+  // Initialize price crons
   const priceCron = new AutomaticPriceFetchCron();
+  const binancePriceCron = new AutomaticBinancePriceFetcher();
+  
+  // Start both price crons
   priceCron.startCron();
+  binancePriceCron.startCron();
 
-    const keys = cache.keys();
-    if (keys.length > 0) {
-      console.log('Cache has values:', keys);
-    } else {
-      console.log('Cache is empty. Running PriceFetch Once');
-      priceCron.fetchTokenPrices();
-      
+  // Check cache and run initial price fetches if needed
+  const keys = cache.keys();
+  if (keys.length > 0) {
+    console.log('Cache has values:', keys);
+  } else {
+    console.log('Cache is empty. Running Initial Price Fetches');
+    try {
+      await priceCron.fetchTokenPrices();
+      await binancePriceCron.fetchAllPrices();
+    } catch (error) {
+      console.error('Initial price fetch failed:', error);
     }
- 
+  }
 };
 
 // Start the application
