@@ -31,6 +31,17 @@ get_price() {
     fi
 }
 
+# Function to calculate percentage spread
+calculate_spread() {
+    local min=$1
+    local max=$2
+    if [[ $min == "N/A" ]] || [[ $max == "N/A" ]]; then
+        echo "N/A"
+    else
+        echo "scale=1; ($max - $min) / $min * 100" | bc
+    fi
+}
+
 # Array of test currencies (all supported by Binance P2P)
 currencies=(
     "COP" "VES" "ARS" "PEN" "CLP" "BRL" "MXN" "USD" 
@@ -39,9 +50,9 @@ currencies=(
 )
 
 # Print header
-printf "\n%-6s | %-15s | %-15s | %-15s | %-15s | %-15s | %-15s | %-30s\n" \
-    "FIAT" "BUY MIN" "BUY MED" "BUY MAX" "SELL MIN" "SELL MED" "SELL MAX" "STATUS"
-printf "=======|=================|=================|=================|=================|=================|================|================================\n"
+printf "\n%-6s | %-15s | %-15s | %-15s | %-8s | %-15s | %-15s | %-15s | %-8s | %-30s\n" \
+    "FIAT" "BUY MIN" "BUY MED" "BUY MAX" "BUY SPR%" "SELL MIN" "SELL MED" "SELL MAX" "SELL SPR%" "STATUS"
+printf "=======|=================|=================|=================|==========|=================|=================|=================|==========|================================\n"
 
 # Set locale for number formatting
 export LC_NUMERIC="en_US.UTF-8"
@@ -55,7 +66,7 @@ for fiat in "${currencies[@]}"; do
     sell_med=$(get_price "SOL" $fiat "binance_median" "SELL")
     sell_max=$(get_price "SOL" $fiat "binance_max" "SELL")
     
-    # Check if any of the values contain error messages
+    # Calculate spreads and status
     status=""
     if [[ $buy_min == ERROR:* ]]; then
         status="No USDT/$(echo $fiat) orders on Binance P2P"
@@ -65,10 +76,36 @@ for fiat in "${currencies[@]}"; do
         sell_min="N/A"
         sell_med="N/A"
         sell_max="N/A"
+        buy_spread="N/A"
+        sell_spread="N/A"
+    else
+        buy_spread=$(calculate_spread ${buy_min//,/} ${buy_max//,/})
+        sell_spread=$(calculate_spread ${sell_min//,/} ${sell_max//,/})
+        
+        # Check for unreasonable spreads
+        if [[ $buy_spread != "N/A" ]] && (( $(echo "$buy_spread > 200" | bc -l) )); then
+            status="Warning: High buy spread"
+        fi
+        if [[ $sell_spread != "N/A" ]] && (( $(echo "$sell_spread > 200" | bc -l) )); then
+            [[ -z $status ]] && status="Warning: High sell spread" || status="${status}, high sell spread"
+        fi
+        
+        # Check for unusual price relationships
+        if [[ $buy_min != "N/A" ]] && [[ $sell_max != "N/A" ]]; then
+            if (( $(echo "${buy_min//,/} < ${sell_min//,/}" | bc -l) )); then
+                [[ -z $status ]] && status="Warning: Buy < Sell" || status="${status}, buy < sell"
+            fi
+        fi
     fi
     
-    printf "%-6s | %15s | %15s | %15s | %15s | %15s | %15s | %-30s\n" \
-        "$fiat" "$buy_min" "$buy_med" "$buy_max" "$sell_min" "$sell_med" "$sell_max" "$status"
+    # Add % symbol to spreads if they're not N/A
+    [[ $buy_spread != "N/A" ]] && buy_spread="${buy_spread}%"
+    [[ $sell_spread != "N/A" ]] && sell_spread="${sell_spread}%"
+    
+    printf "%-6s | %15s | %15s | %15s | %8s | %15s | %15s | %15s | %8s | %-30s\n" \
+        "$fiat" "$buy_min" "$buy_med" "$buy_max" "$buy_spread" \
+        "$sell_min" "$sell_med" "$sell_max" "$sell_spread" "$status"
 done
 
-printf "\nTest completed at: $(date)\n\n"
+printf "\nTest completed at: $(date)\n"
+printf "Note: Spreads > 200%% or unusual price relationships are flagged as warnings\n\n"
