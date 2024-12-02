@@ -13,7 +13,7 @@ const { startListeningSolanaEvents } = require("./utils/web3Utils");
 const automaticOrderCancellationCron = require("./crons/automatic_order_cancellation_cron");
 const balanceFetchCron = require("./crons/automatic_balance_fetch_cron");
 const AutomaticPriceFetchCron = require("./crons/automatic_price_fetch_cron");
-const AutomaticBinancePriceFetcher = require("./crons/automatic_binance_price_fetch_cron");
+const AutomaticBinancePriceFetcher = require("./crons/automatic_binance_price_fetch_cron"); // Import Binance price fetcher
 const {setupAdminJS} = require('./setupadminjs');
 const {cache} = require('./utils/cache');
 
@@ -69,7 +69,7 @@ const startServer = async () => {
   const io = socketIo(server);
   const setupSocketHandlers = require('./api/routes/socket.route');
   setupSocketHandlers(io);
-  //as soon as the server starts, start listening for our program events.
+  // As soon as the server starts, start listening for our program events.
   startListeningSolanaEvents(io);
 
   // Middleware
@@ -81,7 +81,7 @@ const startServer = async () => {
     res.status(200).send('OK');
   });
 
-  setupAdminJS(app,sessionStore)
+  setupAdminJS(app, sessionStore)
   .then(() => {
     console.log("AdminJS setup complete"); 
   })
@@ -106,11 +106,11 @@ const startServer = async () => {
 
   // Initialize price crons
   const priceCron = new AutomaticPriceFetchCron();
-  const binancePriceCron = new AutomaticBinancePriceFetcher();
+  const binancePriceCron = new AutomaticBinancePriceFetcher(); // Initialize Binance price fetcher
   
   // Start both price crons
   priceCron.startCron();
-  binancePriceCron.startCron();
+  binancePriceCron.startCron(); // Start Binance price fetching cron
 
   // Check cache and run initial price fetches if needed
   const keys = cache.keys();
@@ -120,7 +120,7 @@ const startServer = async () => {
     console.log('Cache is empty. Running Initial Price Fetches');
     try {
       await priceCron.fetchTokenPrices();
-      await binancePriceCron.fetchAllPrices();
+      await binancePriceCron.fetchAllPrices(); // Fetch initial Binance prices
     } catch (error) {
       console.error('Initial price fetch failed:', error);
     }
