@@ -602,33 +602,39 @@ async function fetchedListLoop(element, banksIds = null) {
       calculatedPrice = element.dataValues.price;
     } else {
       // Floating rate - calculate from spot price and margin
-      const type = element.dataValues.type?.toUpperCase() || 'BUY';
+      const type = element.dataValues.type === 'SellList' ? 'BUY' : 'SELL';
       const cacheKey = `prices/${tokenData.dataValues.symbol}/${fiatCurrencyData.dataValues.code}/${type}`;
       const prices = cache.get(cacheKey);
       
       if (prices) {
-        switch(element.dataValues.price_source) {
-          case 2: // binance_min
-            spotPrice = prices[0];
-            break;
-          case 3: // binance_max
-            spotPrice = prices[2];
-            break;
-          case 1: // binance_median
-            spotPrice = prices[1];
-            break;
-          case 0: // coingecko
-          default:
-            const coingeckoKey = `${tokenData.dataValues.coingecko_id}/${fiatCurrencyData.dataValues.code}`.toLowerCase();
-            spotPrice = getCachedPrice(coingeckoKey);
-        }
+        // Get price based on specified price source
+        const priceSourceMap = {
+          2: 0,  // binance_min
+          3: 2,  // binance_max
+          1: 1,  // binance_median
+          0: 4   // coingecko
+        };
+        
+        const priceIndex = priceSourceMap[element.dataValues.price_source] || 4;
+        spotPrice = prices[priceIndex];
 
-        if (spotPrice !== null) {
+        if (spotPrice && spotPrice > 0) {
           const margin = parseFloat(element.dataValues.margin);
-          calculatedPrice = spotPrice * (1 + margin/100);
+          calculatedPrice = spotPrice + ((spotPrice * margin) / 100);
+        } else if (element.dataValues.price_source === 0) {
+          // Fallback to Coingecko for price_source 0
+          const coingeckoKey = `${tokenData.dataValues.coingecko_id}/${fiatCurrencyData.dataValues.code}`.toLowerCase();
+          spotPrice = getCachedPrice(coingeckoKey);
+          if (spotPrice && spotPrice > 0) {
+            const margin = parseFloat(element.dataValues.margin);
+            calculatedPrice = spotPrice + ((spotPrice * margin) / 100);
+          }
         }
-      } else {
-        console.warn(`No cached price found for ${tokenData.dataValues.symbol}/${fiatCurrencyData.dataValues.code}`);
+      }
+
+      // If still no price, log warning
+      if (!calculatedPrice || calculatedPrice <= 0) {
+        console.warn(`No valid price found for ${tokenData.dataValues.symbol}/${fiatCurrencyData.dataValues.code}`);
       }
     }
 
@@ -638,7 +644,7 @@ async function fetchedListLoop(element, banksIds = null) {
       chain_id: element.dataValues.chain_id,
       limit_min: element.dataValues.limit_min,
       limit_max: element.dataValues.limit_max,
-      price: calculatedPrice,
+      price: calculatedPrice || 0,
       margin_type: element.dataValues.margin_type,
       margin: element.dataValues.margin_type === 1 ? element.dataValues.margin : null,
       status: element.dataValues.status,
@@ -654,7 +660,7 @@ async function fetchedListLoop(element, banksIds = null) {
       price_source: priceSourceMethod.priceSourceFunction(
         element.dataValues.price_source
       ),
-      token_spot_price: spotPrice,
+      token_spot_price: spotPrice || 0,
       fiat_currency: fiatCurrencyData,
       token: tokenData,
       payment_methods: totalPaymentMethods,
