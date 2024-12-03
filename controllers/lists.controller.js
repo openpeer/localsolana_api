@@ -562,14 +562,40 @@ async function fetchedListLoop(element, banksIds = null) {
 
     //added logic for handling floating rate changes
     let calculatedPrice = element.dataValues.price;
-    if(element.dataValues.margin_type ==1){
-      console.log("floating rate for",tokenData.dataValues.coingecko_id,fiatCurrencyData.dataValues.code)
-      let price = getCachedPrice(tokenData.dataValues.coingecko_id, fiatCurrencyData.dataValues.code);
-      console.log('Cached Price:',price);
-      let margin = element.dataValues.margin;
-      let total = price - (price * margin) / 100;
-      calculatedPrice = total;
-      console.log('Calculated Price:',calculatedPrice);
+    if (element.dataValues.margin_type === 1) {
+      const type = element.dataValues.type?.toUpperCase() || 'BUY';
+      const cacheKey = `prices/${tokenData.dataValues.symbol}/${fiatCurrencyData.dataValues.code}/${type}`;
+      const prices = cache.get(cacheKey);
+      
+      if (prices) {
+        // Get price based on specified price source
+        let spotPrice;
+        switch(element.dataValues.price_source) {
+          case 2: // binance_min
+            spotPrice = prices[0];
+            break;
+          case 3: // binance_max
+            spotPrice = prices[2];
+            break;
+          case 1: // binance_median
+            spotPrice = prices[1];
+            break;
+          case 0: // coingecko
+          default:
+            // For coingecko, we should use a different caching key/mechanism
+            console.warn('Coingecko price source not yet implemented for floating rates');
+            spotPrice = null;
+        }
+
+        if (spotPrice !== null) {
+          const margin = parseFloat(element.dataValues.margin);
+          calculatedPrice = spotPrice * (1 + margin/100);
+          element.dataValues.token_spot_price = spotPrice;
+        }
+      } else {
+        console.warn(`No cached price found for ${tokenData.dataValues.symbol}/${fiatCurrencyData.dataValues.code}`);
+        element.dataValues.token_spot_price = null;
+      }
     }
 
 
