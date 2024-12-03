@@ -9,6 +9,8 @@ const { min } = require("moment");
 const { Op } = require("sequelize");
 const {isOnline} = require("../utils/util");
 const {getCachedPrice} = require('../utils/cache');
+const { cache } = require('../utils/cache');
+
 
 // method for adding the fiat currencies
 exports.createList = async function (req, res) {
