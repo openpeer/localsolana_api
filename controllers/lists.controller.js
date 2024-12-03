@@ -286,6 +286,7 @@ exports.getList = async (req, res) => {
 // method for updating the list
 exports.updateList = async (req, res) => {
   const { id } = req.params;
+  const list_id = id;
   const {
     chain_id,
     seller_id,
@@ -357,7 +358,7 @@ exports.updateList = async (req, res) => {
         .getQueryInterface()
         .bulkInsert("lists_banks", newBanksData);
     } else if (type === "SellList" && payment_methods.length > 0) {
-      const list_id = id;
+      
       // First, get all existing payment method IDs for this list
       const existingPaymentMethodIds =
         await models.lists_payment_methods.findAll({
