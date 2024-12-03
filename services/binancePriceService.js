@@ -101,7 +101,7 @@ class BinancePriceService {
 
   async fetchSOLPrices(fiat, type) {
     try {
-      // 1. Get USDT/Fiat price with validation
+      // 1. Get USDT/Fiat price from Binance P2P
       const usdtResults = [];
       const firstPage = await this.searchBinanceWithRetry('USDT', fiat, type, 1);
       if (!firstPage?.data) {
@@ -110,36 +110,28 @@ class BinancePriceService {
       }
       
       usdtResults.push(...firstPage.data.map(ad => parseFloat(ad.adv.price)));
-      const totalPages = Math.ceil(firstPage.total / this.PER_PAGE);
       
-      // Fetch remaining pages for USDT
-      for (let page = 2; page <= totalPages; page++) {
-        const pageResult = await this.searchBinanceWithRetry('USDT', fiat, type, page);
-        if (pageResult?.data) {
-          usdtResults.push(...pageResult.data.map(ad => parseFloat(ad.adv.price)));
-        }
-      }
-
       if (usdtResults.length < this.MIN_PRICE_POINTS) {
         console.error(`Insufficient USDT/${fiat} price points. Found: ${usdtResults.length}, Required: ${this.MIN_PRICE_POINTS}`);
         return;
       }
-      
-      // 2. Get SOL/USDT price from Binance spot with retry
-      let spotPrice = null;
-      for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
-        spotPrice = await this.getSOLUSDTPrice();
-        if (spotPrice) break;
-        if (attempt < this.MAX_RETRIES) await this.sleep(this.RETRY_DELAY);
-      }
 
-      if (!spotPrice) {
-        console.error('Failed to fetch SOL/USDT spot price after all retries');
+      // 2. Get SOL/USD price from CoinGecko
+      const { data } = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
+        params: {
+          ids: 'solana',
+          vs_currencies: 'usd'
+        }
+      });
+      
+      const solUsdPrice = data.solana.usd;
+      if (!solUsdPrice) {
+        console.error('Failed to fetch SOL/USD price from CoinGecko');
         return;
       }
 
       // 3. Calculate SOL/Fiat prices
-      const results = usdtResults.map(price => price * spotPrice);
+      const results = usdtResults.map(price => price * solUsdPrice);
       const sorted = results.sort((a, b) => a - b);
       
       const median = sorted.length % 2 === 1
@@ -149,7 +141,7 @@ class BinancePriceService {
       const cacheKey = `prices/SOL/${fiat.toUpperCase()}/${type.toUpperCase()}`;
       cache.set(cacheKey, [sorted[0], median, sorted[sorted.length - 1]], 3600);
       
-      console.log(`Successfully cached ${results.length} SOL prices for ${fiat} ${type} (via USDT)`);
+      console.log(`Successfully cached ${results.length} SOL/${fiat} ${type} prices`);
     } catch (error) {
       console.error(`Error calculating SOL prices for ${fiat} ${type}:`, error.message);
     }
