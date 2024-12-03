@@ -116,18 +116,22 @@ class BinancePriceService {
         return;
       }
 
-      // 2. Get SOL/USD price from CoinGecko
-      const { data } = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
-        params: {
-          ids: 'solana',
-          vs_currencies: 'usd'
-        }
-      });
-      
-      const solUsdPrice = data.solana.usd;
+      // 2. Get or use cached SOL/USD price
+      let solUsdPrice = cache.get('SOL_USD_PRICE');
       if (!solUsdPrice) {
-        console.error('Failed to fetch SOL/USD price from CoinGecko');
-        return;
+        const { data } = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
+          params: {
+            ids: 'solana',
+            vs_currencies: 'usd'
+          }
+        });
+        solUsdPrice = data.solana.usd;
+        if (!solUsdPrice) {
+          console.error('Failed to fetch SOL/USD price from CoinGecko');
+          return;
+        }
+        // Cache for 5 minutes
+        cache.set('SOL_USD_PRICE', solUsdPrice, 300);
       }
 
       // 3. Calculate SOL/Fiat prices
@@ -146,7 +150,6 @@ class BinancePriceService {
       console.error(`Error calculating SOL prices for ${fiat} ${type}:`, error.message);
     }
   }
-
   async getSOLUSDTPrice() {
     try {
       const { data } = await axios.get(`${this.SPOT_URL}?symbol=SOLUSDT`);
