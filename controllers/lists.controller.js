@@ -8,17 +8,58 @@ const { QueryTypes, where, and } = require("sequelize");
 const { min } = require("moment");
 const { Op } = require("sequelize");
 const {isOnline} = require("../utils/util");
-const {getCachedPrice} = require('../utils/cache');
+const { getCachedPrice } = require('../utils/cache');
 const { cache } = require('../utils/cache');
 
 
 // method for adding the fiat currencies
 exports.createList = async function (req, res) {
+  const {
+    chain_id,
+    seller_id,
+    token_id,
+    fiat_currency_id,
+    total_available_amount,
+    limit_min,
+    limit_max,
+    margin_type,
+    margin,
+    terms,
+    automatic_approval,
+    status,
+    payment_method_id,
+    type,
+    bank_id,
+    deposit_time_limit,
+    payment_time_limit,
+    accept_only_verified,
+    escrow_type,
+    price_source,
+    price,
+    payment_methods,
+  } = req.body;
+
   try {
-    //console.log(req.body);
-    let chain_id = 1;
-    const {
-      seller_address,
+    // Validate price/margin based on margin_type
+    if (margin_type === 1) { // Floating rate
+      if (price !== null) {
+        return errorResponse(res, httpCodes.badReq, "Price must be null for floating rate listings");
+      }
+      if (!margin) {
+        return errorResponse(res, httpCodes.badReq, "Margin is required for floating rate listings");
+      }
+    } else { // Fixed rate
+      if (!price) {
+        return errorResponse(res, httpCodes.badReq, "Price is required for fixed rate listings");
+      }
+      if (margin !== null) {
+        return errorResponse(res, httpCodes.badReq, "Margin must be null for fixed rate listings");
+      }
+    }
+
+    const list = await models.lists.create({
+      chain_id,
+      seller_id,
       token_id,
       fiat_currency_id,
       total_available_amount,
@@ -28,6 +69,8 @@ exports.createList = async function (req, res) {
       margin,
       terms,
       automatic_approval,
+      status,
+      payment_method_id,
       type,
       bank_id,
       deposit_time_limit,
@@ -35,104 +78,76 @@ exports.createList = async function (req, res) {
       accept_only_verified,
       escrow_type,
       price_source,
-      payment_methods,
       price,
-    } = req.body;
-    const user = await models.user.findOne({
-      where: {
-        address: seller_address,
-      },
     });
-    //console.log("user" ,user)
-    if (user !== null) {
-      let savedPaymentData;
-      const createListObject = {
-        chain_id,
-        seller_id: user.dataValues.id,
-        token_id,
-        fiat_currency_id,
-        total_available_amount,
-        limit_min,
-        limit_max,
-        margin_type,
-        margin,
-        terms,
-        automatic_approval,
-        status: 1,
-        payment_method_id: null,
-        type,
-        deposit_time_limit,
-        payment_time_limit,
-        accept_only_verified,
-        escrow_type,
-        price_source,
-        price,
-      };
-      // console.log("createListObject", createListObject);
-      const listCreatedData = await models.lists.create(createListObject);
-      let bankIds = [];
-      // console.log("Data", listCreatedData);
-      if (type == "SellList") {
-        if (payment_methods.length > 0) {
-          for (const item of payment_methods) {
-            savedPaymentData = await new Promise(async (resolve) => {
-              // console.log('element', item);
-              //console.log("------------item----------", item.bank_id);
-              bankIds.push(item.bank_id);
-              let paymentMethodData = {
-                user_id: user.dataValues.id,
-                bank_id: item.bank_id,
-                type: "ListPaymentMethod",
-                values: item.values,
-              };
-              const paymentMethod = await models.payment_methods.create(
-                paymentMethodData
-              );
-              //console.log("paymentMethod", paymentMethod);
-              if (paymentMethod) {
-                const data = {
-                  list_id: listCreatedData.dataValues.id,
-                  payment_method_id: paymentMethod.dataValues.id,
-                };
-                const result = await sequelize.query(
-                  `INSERT INTO "lists_payment_methods" ("list_id", "payment_method_id")
-                   VALUES (${listCreatedData.dataValues.id}, ${paymentMethod.dataValues.id})
-                   `,
-                  {
-                    type: QueryTypes.INSERT,
-                  }
-                );
-                //  const list_payment_methods_data  = await models.lists_payment_methods.create(data);
-                console.log("list_payment_methods", result);
-              }
-              resolve(paymentMethod);
-            });
-          }
+
+    if (type === "BuyList" && payment_methods.length > 0) {
+      const newBanksData = payment_methods.map((data) => ({
+        list_id: list.dataValues.id,
+        bank_id: data.bank.id,
+      }));
+
+      await sequelize.getQueryInterface().bulkInsert("lists_banks", newBanksData);
+    } else if (type === "SellList" && payment_methods.length > 0) {
+      payment_methods.forEach(async (params) => {
+        const result = await models.payment_methods.findOne({
+          where: {
+            user_id: seller_id,
+            bank_id: params.bank_id,
+          },
+        });
+
+        let payment_method_id = 0;
+        if (!result) {
+          const payment_method_created = await models.payment_methods.create({
+            user_id: seller_id,
+            bank_id: params.bank_id,
+            values: params.values,
+            type: "ListPaymentMethod",
+          });
+          payment_method_id = payment_method_created.dataValues.id;
+        } else {
+          payment_method_id = result.dataValues.id;
+
+          await models.payment_methods.update(
+            {
+              values: params.values,
+            },
+            {
+              where: {
+                user_id: seller_id,
+                bank_id: params.bank_id,
+              },
+            }
+          );
         }
-      } else {
-        bankIds = req.body.bank_ids;
-        if (bankIds.length > 0) {
-          for (let id of bankIds) {
-            const result = await sequelize.query(
-              `INSERT INTO "lists_banks" ("list_id", "bank_id")
-               VALUES (${listCreatedData.dataValues.id}, ${id})
-               `,
-              {
-                type: QueryTypes.INSERT,
-              }
-            );
-            // console.log("bankIds", result);
-          }
+
+        const check_existence_in_list_payment_methods =
+          await models.lists_payment_methods.findOne({
+            where: {
+              list_id: list.dataValues.id,
+              payment_method_id: payment_method_id,
+            },
+            attributes: ["list_id", "payment_method_id"],
+          });
+
+        if (!check_existence_in_list_payment_methods) {
+          const result1 = await sequelize.query(
+            `INSERT INTO "lists_payment_methods" ("list_id", "payment_method_id")
+                VALUES (${list.dataValues.id}, ${payment_method_id})
+                `,
+            {
+              type: QueryTypes.INSERT,
+            }
+          );
+          // console.log(result1);
         }
-      }
-      // console.log("bankIds", bankIds);
-      const data = await fetchedListLoop(listCreatedData, bankIds);
-      return successResponse(res, Messages.success, data);
-    } else {
-      return successResponse(res, "No user found", []);
+      });
     }
+
+    return successResponse(res, Messages.createdList, list);
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return errorResponse(res, httpCodes.serverError, Messages.systemError);
   }
 };
@@ -200,7 +215,7 @@ exports.getAllLists = async (req, res) => {
     if (listData !== null) {
       for (const item of listData) {
         let bankIdsData = [];
-        if (type === "SellList") {
+        if (item.dataValues.type === "SellList") {
           const result = await fetchedListLoop(item);
           //  console.log("data", data);
           output.push(result);
@@ -314,7 +329,27 @@ exports.updateList = async (req, res) => {
     payment_methods,
   } = req.body;
   const { user } = req;
+
   try {
+
+        // Validate price/margin based on margin_type
+        if (margin_type === 1) { // Floating rate
+          if (price !== null) {
+            return errorResponse(res, httpCodes.badReq, "Price must be null for floating rate listings");
+          }
+          if (!margin) {
+            return errorResponse(res, httpCodes.badReq, "Margin is required for floating rate listings");
+          }
+        } else { // Fixed rate
+          if (!price) {
+            return errorResponse(res, httpCodes.badReq, "Price is required for fixed rate listings");
+          }
+          if (margin !== null) {
+            return errorResponse(res, httpCodes.badReq, "Margin must be null for fixed rate listings");
+          }
+        }
+
+
     const fetchedList = await models.lists.findByPk(id);
     if (!fetchedList) {
       return errorResponse(res, httpCodes.badReq, Messages.listNotFound);
@@ -478,7 +513,6 @@ module.exports.getListsCount = async (req, res) => {
 async function fetchedListLoop(element, banksIds = null) {
   return new Promise(async (resolve) => {
     let banksData = [];
-    //  console.log("banksIds", banksIds)
     if (banksIds) {
       for (let item of banksIds) {
         let particularBankData = await models.banks.findByPk(item);
@@ -486,7 +520,6 @@ async function fetchedListLoop(element, banksIds = null) {
         banksData.push(data);
       }
     }
-    //    console.log("element.dataValues.bank_id", element.dataValues.bank_id);
 
     let fiatCurrencyData;
     if (
@@ -497,6 +530,7 @@ async function fetchedListLoop(element, banksIds = null) {
         element.dataValues.fiat_currency_id
       );
     }
+    
     let tokenData;
     if (
       element.dataValues.token_id !== "" ||
@@ -512,7 +546,7 @@ async function fetchedListLoop(element, banksIds = null) {
         list_id: element.dataValues.id,
       },
     });
-    //console.log("paymentMethodsIds", paymentMethods);
+
     if (
       element.dataValues.payment_method_id !== "" ||
       element.dataValues.payment_method_id !== null
@@ -525,17 +559,16 @@ async function fetchedListLoop(element, banksIds = null) {
           },
         });
         for (let record of paymentMethodsData) {
-          let paymentMethodData = record.dataValues; // Extract data values from each record
-          //  console.log(" -------------------paymentMethodData", paymentMethodData);
+          let paymentMethodData = record.dataValues;
           let particularBankData = await models.banks.findByPk(
             paymentMethodData.bank_id
           );
-          //   console.log("------------------banks --------", particularBankData);
           paymentMethodData["bank"] = particularBankData;
-          totalPaymentMethods.push(paymentMethodData); // Push the processed data to the final array
+          totalPaymentMethods.push(paymentMethodData);
         }
       }
     }
+
     let userData;
     if (
       element.dataValues.seller_id !== "" ||
@@ -551,7 +584,6 @@ async function fetchedListLoop(element, banksIds = null) {
           chain_id: element.dataValues.chain_id,
         },
       });
-      //console.log("contracts", contracts);
       userData.dataValues["contracts"] = contracts;
       userData.dataValues["online"] = isOnline(
         userData.dataValues.timezone,
@@ -559,19 +591,22 @@ async function fetchedListLoop(element, banksIds = null) {
         userData.dataValues.available_to,
         userData.dataValues.weeekend_offline
       );
-      //console.log("userData", userData);
     }
 
-    //added logic for handling floating rate changes
-    let calculatedPrice = element.dataValues.price;
-    if (element.dataValues.margin_type === 1) {
+    // Price calculation logic
+    let calculatedPrice = null;
+    let spotPrice = null;
+
+    if (element.dataValues.margin_type === 0) {
+      // Fixed rate - use stored price
+      calculatedPrice = element.dataValues.price;
+    } else {
+      // Floating rate - calculate from spot price and margin
       const type = element.dataValues.type?.toUpperCase() || 'BUY';
       const cacheKey = `prices/${tokenData.dataValues.symbol}/${fiatCurrencyData.dataValues.code}/${type}`;
       const prices = cache.get(cacheKey);
       
       if (prices) {
-        // Get price based on specified price source
-        let spotPrice;
         switch(element.dataValues.price_source) {
           case 2: // binance_min
             spotPrice = prices[0];
@@ -584,22 +619,18 @@ async function fetchedListLoop(element, banksIds = null) {
             break;
           case 0: // coingecko
           default:
-            // For coingecko, we should use a different caching key/mechanism
-            console.warn('Coingecko price source not yet implemented for floating rates');
-            spotPrice = null;
+            const coingeckoKey = `${tokenData.dataValues.coingecko_id}/${fiatCurrencyData.dataValues.code}`.toLowerCase();
+            spotPrice = getCachedPrice(coingeckoKey);
         }
 
         if (spotPrice !== null) {
           const margin = parseFloat(element.dataValues.margin);
           calculatedPrice = spotPrice * (1 + margin/100);
-          element.dataValues.token_spot_price = spotPrice;
         }
       } else {
         console.warn(`No cached price found for ${tokenData.dataValues.symbol}/${fiatCurrencyData.dataValues.code}`);
-        element.dataValues.token_spot_price = null;
       }
     }
-
 
     let response = {
       id: element.dataValues.id,
@@ -609,7 +640,7 @@ async function fetchedListLoop(element, banksIds = null) {
       limit_max: element.dataValues.limit_max,
       price: calculatedPrice,
       margin_type: element.dataValues.margin_type,
-      margin: element.dataValues.margin,
+      margin: element.dataValues.margin_type === 1 ? element.dataValues.margin : null,
       status: element.dataValues.status,
       terms: element.dataValues.terms,
       token: element.dataValues.token_id,
@@ -623,12 +654,13 @@ async function fetchedListLoop(element, banksIds = null) {
       price_source: priceSourceMethod.priceSourceFunction(
         element.dataValues.price_source
       ),
+      token_spot_price: spotPrice,
       fiat_currency: fiatCurrencyData,
       token: tokenData,
       payment_methods: totalPaymentMethods,
       seller: userData,
     };
-    ///  console.log("response", response)
+
     resolve(response);
   });
 }
