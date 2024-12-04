@@ -100,6 +100,10 @@ const createRouter = (io) => {
     // Routes for payment methods
     router.get('/getPaymentMethods/:id', paymentMethods.getPaymentMethods);
     router.get('/prices', pricesController.fetchData);
+
+    // inspect the cache
+    // router.get('/cache/inspect', pricesController.inspectCache);
+
     router.get('/quickBuy', quickBuyController.quickBuy);
 
     //Routes for transaction
