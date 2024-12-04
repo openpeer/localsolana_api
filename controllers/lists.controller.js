@@ -604,35 +604,39 @@ async function fetchedListLoop(element, banksIds = null) {
       // Floating rate - calculate from spot price and margin
       const type = element.dataValues.type === 'SellList' ? 'BUY' : 'SELL';
       const cacheKey = `prices/${tokenData.dataValues.symbol}/${fiatCurrencyData.dataValues.code}/${type}`;
+      console.log('Cache Key:', cacheKey);
       const prices = cache.get(cacheKey);
-      
+      console.log('Prices from cache:', prices);
+
       if (prices) {
-        // Get price based on specified price source
         const priceSourceMap = {
           2: 0,  // binance_min
           3: 2,  // binance_max
           1: 1,  // binance_median
           0: 4   // coingecko
         };
-        
+
         const priceIndex = priceSourceMap[element.dataValues.price_source] || 4;
         spotPrice = prices[priceIndex];
+        console.log('Spot Price:', spotPrice);
 
         if (spotPrice && spotPrice > 0) {
           const margin = parseFloat(element.dataValues.margin);
           calculatedPrice = spotPrice + ((spotPrice * margin) / 100);
+          console.log('Calculated Price:', calculatedPrice);
         } else if (element.dataValues.price_source === 0) {
           // Fallback to Coingecko for price_source 0
           const coingeckoKey = `${tokenData.dataValues.coingecko_id}/${fiatCurrencyData.dataValues.code}`.toLowerCase();
           spotPrice = getCachedPrice(coingeckoKey);
+          console.log('Coingecko Spot Price:', spotPrice);
           if (spotPrice && spotPrice > 0) {
             const margin = parseFloat(element.dataValues.margin);
             calculatedPrice = spotPrice + ((spotPrice * margin) / 100);
+            console.log('Fallback Calculated Price:', calculatedPrice);
           }
         }
       }
 
-      // If still no price, log warning
       if (!calculatedPrice || calculatedPrice <= 0) {
         console.warn(`No valid price found for ${tokenData.dataValues.symbol}/${fiatCurrencyData.dataValues.code}`);
       }
