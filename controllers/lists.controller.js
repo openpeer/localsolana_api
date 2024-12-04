@@ -218,7 +218,7 @@ exports.getAllLists = async (req, res) => {
           const result = await fetchedListLoop(item);
           //  console.log("data", data);
           output.push(result);
-        } else if (type === "BuyList") {
+        } else if (item.dataValues.type === "BuyList") {
           const bankIds = await models.lists_banks.findAll({
             attributes: ["bank_id"],
             where: {
@@ -660,6 +660,9 @@ else {
 
 exports.fetchListForParticularUser = async (req, res) => {
   const { seller } = req.query;
+  if (!seller) {
+    return errorResponse(res, httpCodes.badReq, "Seller address is required");
+  }
   try {
     // console.log("userId", seller);
     let page = req.params.page ? req.params.page : 1;
@@ -751,8 +754,12 @@ exports.testListController = async (req, res) => {
 };
 
 exports.fetchMyAds = async (req, res) => {
-  console.log("here in my ads");
+  console.log("Fetching ads for user");
   const { user } = req;
+  if (!user || !user.address) {
+    console.error("User not authenticated or address missing");
+    return errorResponse(res, httpCodes.badReq, "User not authenticated or address missing");
+  }
   try {
     let page = req.query.page ? req.query.page : 1;
     let pageSize = req.query.pageSize ? req.query.pageSize : 20;
@@ -763,11 +770,13 @@ exports.fetchMyAds = async (req, res) => {
       where: {
         address: user.address,
       },
-      limit: pageSizeNumber,
-      offset: offset,
-      order: [["created_at", "DESC"]],
     });
-    //console.log("user",user)
+
+    if (!userData) {
+      console.error("User not found in database");
+      return errorResponse(res, httpCodes.badReq, "User not found");
+    }
+
     const listData = await models.lists.findAll({
       limit: pageSizeNumber,
       offset: offset,
@@ -779,14 +788,13 @@ exports.fetchMyAds = async (req, res) => {
         },
       },
     });
-    //console.log("listData", listData);
+
     let output = [];
     if (listData !== null) {
       for (const item of listData) {
         let bankIdsData = [];
         if (item.dataValues.type == "SellList") {
           const result = await fetchedListLoop(item);
-          //  console.log("data", data);
           output.push(result);
         } else {
           const bankIds = await models.lists_banks.findAll({
@@ -796,21 +804,20 @@ exports.fetchMyAds = async (req, res) => {
             },
           });
           bankIds.forEach((record) => {
-            let banks = record.dataValues.bank_id; // Extract data values from each record
+            let banks = record.dataValues.bank_id;
             bankIdsData.push(banks);
           });
           const result = await fetchedListLoop(item, bankIdsData);
-
-          //console.log("data", data);
           output.push(result);
         }
       }
     } else {
+      console.error("No data found for user");
       return errorResponse(res, httpCodes.badReq, Messages.noDataFound);
     }
     return successResponse(res, Messages.getList, output);
   } catch (error) {
-    console.error(error);
+    console.error("Error fetching ads:", error);
     return errorResponse(res, httpCodes.serverError, Messages.systemError);
   }
 };
