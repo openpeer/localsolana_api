@@ -71,8 +71,7 @@ class AutomaticPriceFetcher {
     }
   }
 
-  async fetchSingleTokenPrice(id,currency) {
-
+  async fetchSingleTokenPrice(id, currency) {
     try {
       const response = await axios.get(this.baseUrl, {
         params: { ids: id, vs_currencies: currency },
@@ -81,17 +80,18 @@ class AutomaticPriceFetcher {
           "x-cg-pro-api-key": process.env.COINGECKO_API_KEY,
         },
       });
-
+  
       if (response.status === 200) {
         const prices = response.data;
-        console.log('prices',prices);
-
-        // Cache each coin-currency pair
+        console.log('prices', prices);
+  
+        // Cache each coin-currency pair with the correct key format
         Object.keys(prices).forEach((coin) => {
-          Object.keys(prices[coin]).forEach((currency) => {
-            const cacheKey = `prices/${coin}/${currency}`;
-            cache.set(cacheKey, prices[coin][currency]);
-            //console.log(`Cached ${cacheKey}: ${prices[coin][currency]}`);
+          Object.keys(prices[coin]).forEach((curr) => {
+            // Use uppercase for consistency with Binance caching
+            const cacheKey = `prices/${coin.toUpperCase()}/${curr.toUpperCase()}`;
+            cache.set(cacheKey, prices[coin][curr]);
+            console.log(`Cached ${cacheKey}: ${prices[coin][curr]}`);
           });
         });
       }
