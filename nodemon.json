@@ -1,0 +1,20 @@
+{
+  "verbose": true,
+  "ignore": [
+    "node_modules",
+    ".git",
+    "logs/*",
+    "public/*"
+  ],
+  "watch": [
+    "controllers/",
+    "models/",
+    "routes/",
+    "utils/",
+    "services/",
+    "crons/",
+    "middleware/",
+    "server.js"
+  ],
+  "ext": "js,json,env"
+}
