@@ -9,7 +9,7 @@ const { min } = require("moment");
 const { Op } = require("sequelize");
 const {isOnline} = require("../utils/util");
 const { cache } = require('../utils/cache');
-
+const { isCoinGeckoSupported, isBinanceSupported } = require('../utils/supportedCurrencies');
 
 // method for adding the fiat currencies
 exports.createList = async function (req, res) {
@@ -154,8 +154,7 @@ exports.createList = async function (req, res) {
 // Read All lists
 exports.getAllLists = async (req, res) => {
   try {
-    const { type, amount, currency, payment_method, token, fiat_amount } =
-      req.query;
+    const { type, amount, currency, payment_method, token, fiat_amount } = req.query;
     const filter = {};
 
     // Adding filters based on provided query parameters
@@ -189,15 +188,13 @@ exports.getAllLists = async (req, res) => {
       ];
     }
 
-    // console.log("filter-------------", filter);
-
     let page = req.query.page ? req.query.page : 1;
     let pageSize = req.query.pageSize ? req.query.pageSize : 20;
     const pageNumber = Math.max(parseInt(page), 1);
     const pageSizeNumber = Math.max(parseInt(pageSize), 1);
     const offset = (pageNumber - 1) * pageSizeNumber;
     const totalRecords = await models.lists.count({ where: filter });
-    const totalPages = Math.ceil(totalRecords / 20);
+    const totalPages = Math.ceil(totalRecords / pageSizeNumber);
     const listData = await models.lists.findAll({
       where: {
         ...filter,
@@ -209,15 +206,13 @@ exports.getAllLists = async (req, res) => {
       offset: offset,
       order: [["created_at", "DESC"]],
     });
-    //console.log(listData); // Output the result
+
     let output = [];
     if (listData !== null) {
       for (const item of listData) {
-        let bankIdsData = [];
+        let result;
         if (item.dataValues.type === "SellList") {
-          const result = await fetchedListLoop(item);
-          //  console.log("data", data);
-          output.push(result);
+          result = await fetchedListLoop(item);
         } else if (item.dataValues.type === "BuyList") {
           const bankIds = await models.lists_banks.findAll({
             attributes: ["bank_id"],
@@ -225,31 +220,26 @@ exports.getAllLists = async (req, res) => {
               list_id: item.dataValues.id,
             },
           });
-          bankIds.forEach((record) => {
-            let banks = record.dataValues.bank_id; // Extract data values from each record
-            bankIdsData.push(banks);
-          });
-          const result = await fetchedListLoop(item, bankIdsData);
+          const bankIdsData = bankIds.map(record => record.dataValues.bank_id);
+          result = await fetchedListLoop(item, bankIdsData);
+        }
 
-          //console.log("data", data);
+        // Only add to output if result is valid and has seller data
+        if (result && result.seller && result.seller.address) {
           output.push(result);
-          //return successResponse(res, Messages.getList, output);
-        } else {
         }
       }
-    } else {
-      return errorResponse(res, httpCodes.badReq, Messages.noDataFound);
     }
+
     let results = {
       data: output,
       meta: {
         current_page: pageNumber,
         total_pages: totalPages,
-        total_count: totalRecords,
+        total_count: output.length, // Update count to reflect filtered results
       },
     };
-    // console.log("output--------------------------", output);
-    // console.log(successResponse(res, Messages.getList, output));
+
     return successResponse(res, Messages.getList, results);
   } catch (error) {
     console.error(error);
@@ -511,139 +501,150 @@ module.exports.getListsCount = async (req, res) => {
 
 async function fetchedListLoop(element, banksIds = null) {
   return new Promise(async (resolve) => {
-      try {
-          let banksData = [];
-          if (banksIds) {
-              for (let item of banksIds) {
-                  let particularBankData = await models.banks.findByPk(item);
-                  if (particularBankData) {
-                      let data = particularBankData.dataValues;
-                      banksData.push(data);
-                  }
-              }
+    try {
+      let banksData = [];
+      if (banksIds) {
+        for (let item of banksIds) {
+          let particularBankData = await models.banks.findByPk(item);
+          if (particularBankData) {
+            let data = particularBankData.dataValues;
+            banksData.push(data);
           }
-
-          let fiatCurrencyData;
-          if (element.dataValues.fiat_currency_id !== "" && element.dataValues.fiat_currency_id !== null) {
-              fiatCurrencyData = await models.fiat_currencies.findByPk(element.dataValues.fiat_currency_id);
-          }
-
-          let tokenData;
-          if (element.dataValues.token_id !== "" && element.dataValues.token_id !== null) {
-              tokenData = await models.tokens.findByPk(element.dataValues.token_id);
-          }
-
-          let totalPaymentMethods = [];
-          const paymentMethodsIds = await models.lists_payment_methods.findAll({
-              attributes: ["payment_method_id"],
-              where: {
-                  list_id: element.dataValues.id,
-              },
-          });
-
-          if (element.dataValues.payment_method_id !== "" && element.dataValues.payment_method_id !== null) {
-              for (let item of paymentMethodsIds) {
-                  let paymentMethodsData = await models.payment_methods.findAll({
-                      where: {
-                          id: item.dataValues.payment_method_id,
-                          user_id: element.dataValues.seller_id,
-                      },
-                  });
-                  for (let record of paymentMethodsData) {
-                      let paymentMethodData = record.dataValues;
-                      let particularBankData = await models.banks.findByPk(paymentMethodData.bank_id);
-                      if (particularBankData) {
-                          paymentMethodData["bank"] = particularBankData;
-                          totalPaymentMethods.push(paymentMethodData);
-                      }
-                  }
-              }
-          }
-
-          let userData;
-          if (element.dataValues.seller_id !== "" && element.dataValues.seller_id !== null) {
-              userData = await models.user.findByPk(element.dataValues.seller_id);
-              if (!userData) {
-                  console.log("User not found for ", element.dataValues.seller_id);
-              } else {
-                  let contracts = await models.contracts.findAll({
-                      where: {
-                          user_id: element.dataValues.seller_id,
-                          chain_id: element.dataValues.chain_id,
-                      },
-                  });
-                  userData.dataValues["contracts"] = contracts;
-                  userData.dataValues["online"] = isOnline(
-                      userData.dataValues.timezone,
-                      userData.dataValues.available_from,
-                      userData.dataValues.available_to,
-                      userData.dataValues.weeekend_offline
-                  );
-              }
-          }
-
-          // Price calculation logic
-          let calculatedPrice = null;
-          let spotPrice = null;
-
-          // Determine cache key based on price source and check if fiat is supported
-          if (!fiatCurrencyData || !tokenData) {
-              console.error('Missing required data:', { fiatCurrencyData, tokenData });
-              return resolve(element);
-          }
-
-          const canUseBinance = element.dataValues.price_source === 1 && 
-                                fiatCurrencyData.dataValues.allow_binance_rates === true;
-
-          if (!canUseBinance) {
-              const cacheKey = `prices/${tokenData.dataValues.coingecko_id.toLowerCase()}/${fiatCurrencyData.dataValues.code.toLowerCase()}`;
-              spotPrice = cache.get(cacheKey);
-              console.log('CoinGecko Cache Key:', cacheKey);
-
-              if (!spotPrice) {
-                  console.error(`Cache miss for CoinGecko price: ${cacheKey}`);
-                  spotPrice = parseFloat(element.dataValues.price);
-                  console.log('Falling back to fixed price:', spotPrice);
-              } else {
-                  console.log('CoinGecko Price:', spotPrice);
-              }
-          } else {
-              const type = element.dataValues.type === 'SellList' ? 'BUY' : 'SELL';
-              const cacheKey = `prices/${tokenData.dataValues.symbol.toUpperCase()}/${fiatCurrencyData.dataValues.code.toUpperCase()}/${type}`;
-              const prices = cache.get(cacheKey);
-              console.log('Binance Cache Key:', cacheKey);
-
-              if (prices && Array.isArray(prices)) {
-                  spotPrice = prices[1]; // Use median price (index 1)
-                  console.log('Binance Prices:', prices);
-              } else {
-                  console.error(`Cache miss for Binance prices: ${cacheKey}`);
-                  spotPrice = parseFloat(element.dataValues.price);
-                  console.log('Falling back to fixed price:', spotPrice);
-              }
-          }
-
-          if (spotPrice && spotPrice > 0 && element.dataValues.margin_type === 1) {
-              const margin = parseFloat(element.dataValues.margin);
-              calculatedPrice = spotPrice + ((spotPrice * margin) / 100);
-              console.log('Final Calculated Price:', calculatedPrice);
-          } else {
-              calculatedPrice = parseFloat(element.dataValues.price);
-          }
-
-          resolve({
-              ...element.dataValues,
-              banksData,
-              fiatCurrencyData,
-              tokenData,
-              totalPaymentMethods,
-              userData,
-              calculatedPrice
-          });
-      } catch (error) {
-          console.error('Error in fetchedListLoop:', error);
-          resolve(element);
+        }
       }
+
+      let fiatCurrencyData;
+      if (element.dataValues.fiat_currency_id !== "" && element.dataValues.fiat_currency_id !== null) {
+        fiatCurrencyData = await models.fiat_currencies.findByPk(element.dataValues.fiat_currency_id);
+      }
+
+      let tokenData;
+      if (element.dataValues.token_id !== "" && element.dataValues.token_id !== null) {
+        tokenData = await models.tokens.findByPk(element.dataValues.token_id);
+      }
+
+      let totalPaymentMethods = [];
+      const paymentMethodsIds = await models.lists_payment_methods.findAll({
+        attributes: ["payment_method_id"],
+        where: {
+          list_id: element.dataValues.id,
+        },
+      });
+
+      if (element.dataValues.payment_method_id !== "" && element.dataValues.payment_method_id !== null) {
+        for (let item of paymentMethodsIds) {
+          let paymentMethodsData = await models.payment_methods.findAll({
+            where: {
+              id: item.dataValues.payment_method_id,
+              user_id: element.dataValues.seller_id,
+            },
+          });
+          for (let record of paymentMethodsData) {
+            let paymentMethodData = record.dataValues;
+            let particularBankData = await models.banks.findByPk(paymentMethodData.bank_id);
+            if (particularBankData) {
+              paymentMethodData["bank"] = particularBankData;
+              totalPaymentMethods.push(paymentMethodData);
+            }
+          }
+        }
+      }
+
+      // Enhanced seller data handling
+      let userData = null;
+      if (element.dataValues.seller_id) {
+        userData = await models.user.findByPk(element.dataValues.seller_id);
+        
+        if (!userData) {
+          console.error("Seller not found for list:", element.dataValues.id);
+          return resolve(null);
+        }
+
+        // Add contracts data
+        const contracts = await models.contracts.findAll({
+          where: {
+            user_id: element.dataValues.seller_id,
+            chain_id: element.dataValues.chain_id,
+          },
+        });
+        userData.dataValues.contracts = contracts;
+        userData.dataValues.online = isOnline(
+          userData.dataValues.timezone,
+          userData.dataValues.available_from,
+          userData.dataValues.available_to,
+          userData.dataValues.weeekend_offline
+        );
+      } else {
+        console.error("No seller_id found for list:", element.dataValues.id);
+        return resolve(null);
+      }
+
+      // Price calculation logic
+      let calculatedPrice = null;
+      let spotPrice = null;
+
+      if (!fiatCurrencyData || !tokenData) {
+        console.error('Missing required data:', { fiatCurrencyData, tokenData });
+        return resolve(null);
+      }
+
+      const canUseBinance = element.dataValues.price_source === 1 && 
+      fiatCurrencyData.dataValues.allow_binance_rates === true;
+
+      const useCoingecko = element.dataValues.price_source === 2 && 
+      tokenData.dataValues.coingecko_id && 
+      isCoinGeckoSupported(fiatCurrencyData.dataValues.code);
+
+if (canUseBinance) {
+const type = element.dataValues.type === 'SellList' ? 'BUY' : 'SELL';
+const cacheKey = `prices/${tokenData.dataValues.symbol.toUpperCase()}/${fiatCurrencyData.dataValues.code.toUpperCase()}/${type}`;
+const prices = cache.get(cacheKey);
+
+if (prices && Array.isArray(prices)) {
+spotPrice = prices[1]; // Use median price
+} else {
+console.error(`Cache miss for Binance prices: ${cacheKey}`);
+spotPrice = parseFloat(element.dataValues.price);
+}
+} else if (useCoingecko) {
+const cacheKey = `prices/${tokenData.dataValues.coingecko_id.toLowerCase()}/${fiatCurrencyData.dataValues.code.toLowerCase()}`;
+spotPrice = cache.get(cacheKey);
+
+if (!spotPrice) {
+console.log(`Using fixed price for ${fiatCurrencyData.dataValues.code} as CoinGecko price not available`);
+spotPrice = parseFloat(element.dataValues.price);
+}
+} else {
+console.log(`Using fixed price for ${fiatCurrencyData.dataValues.code} as neither Binance nor CoinGecko are available`);
+spotPrice = parseFloat(element.dataValues.price);
+}
+      // Calculate final price
+      if (spotPrice && spotPrice > 0 && element.dataValues.margin_type === 1) {
+        const margin = parseFloat(element.dataValues.margin);
+        calculatedPrice = spotPrice + ((spotPrice * margin) / 100);
+      } else {
+        calculatedPrice = parseFloat(element.dataValues.price);
+      }
+
+      resolve({
+        ...element.dataValues,
+        banksData,
+        fiatCurrencyData,
+        token: tokenData?.dataValues,
+        totalPaymentMethods,
+        seller: userData ? {
+          address: userData.dataValues.address,
+          name: userData.dataValues.name || '',
+          online: userData.dataValues.online
+        } : null,
+        calculatedPrice,
+        spotPrice // Added for debugging
+      });
+
+    } catch (error) {
+      console.error('Error in fetchedListLoop:', error);
+      resolve(null);
+    }
   });
 }
 
