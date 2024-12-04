@@ -9,7 +9,7 @@ class AutomaticBinancePriceFetcher {
     // CHANGE: Added class properties for configuration
     this.CRON_SCHEDULE = "*/30 * * * *"; // Runs every 30 minutes
     this.SUPPORTED_TOKENS = ["SOL"]; // Currently only supporting SOL
-    this.MAX_CONCURRENT_REQUESTS = 3; // Limit concurrent API calls
+    this.MAX_CONCURRENT_REQUESTS = 1; // Limit concurrent API calls
   }
 
   startCron() {
