@@ -33,7 +33,6 @@ class AutomaticBinancePriceFetcher {
       const tokens = await models.tokens.findAll({
         where: { 
           allow_binance_rates: true,
-          symbol: this.SUPPORTED_TOKENS // Only fetch supported tokens
         },
         attributes: ["symbol"]
       });
