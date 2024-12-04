@@ -1,39 +1,37 @@
-// crons/automatic_binance_price_fetch_cron.js
-
-const cron = require("node-cron");
-const models = require("../models");
-const binancePriceService = require("../services/binancePriceService");
+const models = require('../models');
+const binancePriceService = require('../services/binancePriceService');
+const cron = require('node-cron');
 
 class AutomaticBinancePriceFetcher {
   constructor() {
-    // CHANGE: Added class properties for configuration
-    this.CRON_SCHEDULE = "*/30 * * * *"; // Runs every 30 minutes
-    this.SUPPORTED_TOKENS = ["SOL"]; // Currently only supporting SOL
-    this.MAX_CONCURRENT_REQUESTS = 1; // Limit concurrent API calls
+    this.binancePriceService = binancePriceService;
+    this.CRON_SCHEDULE = "*/30 * * * *";
   }
 
   startCron() {
-    // CHANGE: Added more detailed logging
-    console.log(`Starting Binance P2P price fetching cron job (Schedule: ${this.CRON_SCHEDULE})...`);
+    console.log('Starting Binance P2P price fetching cron job (Schedule: ' + this.CRON_SCHEDULE + ')...');
     
-    // CHANGE: Added error handling wrapper around cron execution
+    // Initial fetch on startup (only once)
+    console.log('Running initial Binance price fetch...');
+    this.fetchAllPrices().catch(error => {
+      console.error('Error in initial Binance price fetch:', error);
+    });
+
+    // Schedule subsequent fetches
     cron.schedule(this.CRON_SCHEDULE, async () => {
+      console.log('Running scheduled Binance price fetch...');
       try {
-        console.log("Executing Binance P2P price fetch...");
         await this.fetchAllPrices();
       } catch (error) {
-        console.error("Error in Binance price fetch cron execution:", error);
+        console.error('Error in scheduled Binance price fetch:', error);
       }
     });
   }
 
   async fetchAllPrices() {
     try {
-      // CHANGE: Added validation for configured tokens and fiats
       const tokens = await models.tokens.findAll({
-        where: { 
-          allow_binance_rates: true,
-        },
+        where: { allow_binance_rates: true },
         attributes: ["symbol"]
       });
 
@@ -42,7 +40,6 @@ class AutomaticBinancePriceFetcher {
         attributes: ["code"]
       });
 
-      // CHANGE: Added validation logging
       if (!tokens.length || !fiats.length) {
         console.log("No tokens or fiats configured for Binance rates");
         console.log(`Tokens found: ${tokens.length}, Fiats found: ${fiats.length}`);
@@ -50,51 +47,11 @@ class AutomaticBinancePriceFetcher {
       }
 
       console.log(`Fetching Binance P2P prices for ${tokens.length} tokens and ${fiats.length} fiats`);
-
-      // CHANGE: Added batch processing to limit concurrent requests
-      for (let i = 0; i < tokens.length; i += this.MAX_CONCURRENT_REQUESTS) {
-        const batch = tokens.slice(i, i + this.MAX_CONCURRENT_REQUESTS);
-        
-        // Process batch concurrently
-        await Promise.all(batch.map(async (token) => {
-          for (const fiat of fiats) {
-            try {
-              // CHANGE: Added detailed logging for each fetch
-              console.log(`Fetching ${token.symbol}/${fiat.code} prices...`);
-              
-              // Fetch both BUY and SELL prices
-              await Promise.all([
-                binancePriceService.fetchPrices(token.symbol, fiat.code, 'BUY'),
-                binancePriceService.fetchPrices(token.symbol, fiat.code, 'SELL')
-              ]);
-
-              console.log(`Successfully fetched ${token.symbol}/${fiat.code} prices`);
-            } catch (error) {
-              // CHANGE: Added structured error logging
-              console.error({
-                error: "Failed to fetch Binance prices",
-                token: token.symbol,
-                fiat: fiat.code,
-                message: error.message,
-                stack: error.stack
-              });
-              // Continue with next pair even if one fails
-              continue;
-            }
-          }
-        }));
-      }
-
-      // CHANGE: Added completion logging
-      console.log("Completed Binance P2P price fetch cycle");
+      const results = await this.binancePriceService.fetchAllPrices(tokens, fiats);
+      console.log("Binance price fetch results:", results);
     } catch (error) {
-      // CHANGE: Added detailed error logging for main try-catch
-      console.error("Critical error in Binance price fetch cron:", {
-        message: error.message,
-        stack: error.stack,
-        timestamp: new Date().toISOString()
-      });
-      throw error; // Re-throw to be caught by the cron wrapper
+      console.error("Critical error in Binance price fetch cron:", error);
+      throw error;
     }
   }
 }

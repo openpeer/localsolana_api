@@ -1,60 +1,89 @@
-// services/binancePriceService.js
-
 const axios = require('axios');
-const {cache} = require('../utils/cache');
+const { cache } = require('../utils/cache');
 
 class BinancePriceService {
   constructor() {
     this.PER_PAGE = 20;
     this.BASE_URL = 'https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search';
     this.SPOT_URL = 'https://api.binance.com/api/v3/ticker/price';
-    this.MIN_PRICE_POINTS = 3;
-    this.MAX_RETRIES = 3;
-    this.RETRY_DELAY = 1000; // 1 second
+    this.MIN_PRICE_POINTS = 10;
+    this.MAX_PRICE_POINTS = 25;
+    this.MAX_RETRIES = 2;
+    this.RETRY_DELAY = 3000;
+    this.CACHE_TTL = 1800; // 30 minutes
+    this.MAX_CONCURRENT_REQUESTS = 1;
   }
 
   async sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  async searchBinanceWithRetry(token, fiat, type, page) {
+  async searchBinanceWithRetry(token, fiat, type, page = 1) {
     for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
       try {
-        const { data } = await axios.post(this.BASE_URL, {
+        const response = await axios.post(this.BASE_URL, {
+          fiat,
           page,
           rows: this.PER_PAGE,
-          publisherType: null,
           asset: token,
           tradeType: type,
-          fiat,
-          payTypes: []
+          searchType: "FAST",
         });
-
-        if (!data.success) {
-          console.warn(`Binance API returned unsuccessful response for ${token}/${fiat}:`, data);
-          continue;
-        }
-
-        if (!data.data || data.data.length === 0) {
-          console.warn(`No ${type} orders found for ${token}/${fiat} on page ${page}`);
-          return null;
-        }
-
-        return data;
+        return response.data;
       } catch (error) {
         console.error(`Binance API error (attempt ${attempt}/${this.MAX_RETRIES}):`, error.message);
         if (attempt < this.MAX_RETRIES) {
           await this.sleep(this.RETRY_DELAY);
-          continue;
+        } else {
+          throw error;
         }
-        return null;
       }
     }
-    return null;
+  }
+
+  async fetchSOLPrices(fiat, type) {
+    try {
+      // First get USDT price for the fiat
+      const usdtResults = await this.fetchPrices('USDT', fiat, type);
+      if (!usdtResults) return null;
+
+      // Then get SOL/USDT spot price
+      const spotResponse = await axios.get(`${this.SPOT_URL}?symbol=SOLUSDT`);
+      const solUsdtPrice = parseFloat(spotResponse.data.price);
+
+      // Calculate SOL prices in fiat
+      const [min, median, max] = usdtResults;
+      const results = [
+        min * solUsdtPrice,
+        median * solUsdtPrice,
+        max * solUsdtPrice
+      ];
+
+      const cacheKey = `prices/SOL/${fiat}/${type}`;
+      cache.set(cacheKey, results, this.CACHE_TTL);
+      return results;
+    } catch (error) {
+      console.error('Error fetching SOL prices:', error);
+      return null;
+    }
   }
 
   async fetchPrices(token, fiat, type) {
     try {
+      // Check cache first with age verification
+      const cacheKey = `prices/${token.toUpperCase()}/${fiat.toUpperCase()}/${type.toUpperCase()}`;
+      const cachedValue = cache.get(cacheKey);
+      
+      if (cachedValue) {
+        const cacheAge = (Date.now() - cache.getTtl(cacheKey)) / 1000;
+        if (cacheAge < this.CACHE_TTL) {
+          console.log(`Using cached prices for ${token}/${fiat} ${type} (age: ${Math.round(cacheAge)}s)`);
+          return cachedValue;
+        } else {
+          console.log(`Cache expired for ${token}/${fiat} ${type} (age: ${Math.round(cacheAge)}s)`);
+        }
+      }
+
       // Special handling for SOL
       if (token.toUpperCase() === 'SOL') {
         return this.fetchSOLPrices(fiat, type);
@@ -70,13 +99,21 @@ class BinancePriceService {
       }
       
       results.push(...firstPage.data.map(ad => parseFloat(ad.adv.price)));
-      const totalPages = Math.ceil(firstPage.total / this.PER_PAGE);
+      const totalPages = Math.min(
+        Math.ceil(firstPage.total / this.PER_PAGE),
+        Math.ceil(this.MAX_PRICE_POINTS / this.PER_PAGE)
+      );
       
-      // Fetch remaining pages
+      // Fetch remaining pages until MAX_PRICE_POINTS
       for (let page = 2; page <= totalPages; page++) {
+        if (results.length >= this.MAX_PRICE_POINTS) break;
+        
         const pageResult = await this.searchBinanceWithRetry(token, fiat, type, page);
         if (pageResult?.data) {
-          results.push(...pageResult.data.map(ad => parseFloat(ad.adv.price)));
+          results.push(...pageResult.data
+            .map(ad => parseFloat(ad.adv.price))
+            .slice(0, this.MAX_PRICE_POINTS - results.length)
+          );
         }
       }
 
@@ -90,79 +127,48 @@ class BinancePriceService {
         ? sorted[Math.floor(sorted.length / 2)]
         : (sorted[sorted.length / 2] + sorted[sorted.length / 2 - 1]) / 2;
 
-      const cacheKey = `prices/${token.toUpperCase()}/${fiat.toUpperCase()}/${type.toUpperCase()}`;
-      cache.set(cacheKey, [sorted[0], median, sorted[sorted.length - 1]], 3600);
+      const finalResults = [sorted[0], median, sorted[sorted.length - 1]];
+      cache.set(cacheKey, finalResults, this.CACHE_TTL);
       
       console.log(`Successfully cached ${results.length} prices for ${token}/${fiat} ${type}`);
+      return finalResults;
     } catch (error) {
-      console.error(`Error fetching prices for ${token}/${fiat} ${type}:`, error.message);
-    }
-  }
-
-  async fetchSOLPrices(fiat, type) {
-    try {
-      // 1. Get USDT/Fiat price from Binance P2P
-      const usdtResults = [];
-      const firstPage = await this.searchBinanceWithRetry('USDT', fiat, type, 1);
-      if (!firstPage?.data) {
-        console.error(`No USDT/${fiat} ${type} orders found on Binance P2P`);
-        return;
-      }
-      
-      usdtResults.push(...firstPage.data.map(ad => parseFloat(ad.adv.price)));
-      
-      if (usdtResults.length < this.MIN_PRICE_POINTS) {
-        console.error(`Insufficient USDT/${fiat} price points. Found: ${usdtResults.length}, Required: ${this.MIN_PRICE_POINTS}`);
-        return;
-      }
-
-      // 2. Get or use cached SOL/USD price
-      let solUsdPrice = cache.get('SOL_USD_PRICE');
-      if (!solUsdPrice) {
-        const { data } = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
-          params: {
-            ids: 'solana',
-            vs_currencies: 'usd'
-          }
-        });
-        solUsdPrice = data.solana.usd;
-        if (!solUsdPrice) {
-          console.error('Failed to fetch SOL/USD price from CoinGecko');
-          return;
-        }
-        // Cache for 5 minutes
-        cache.set('SOL_USD_PRICE', solUsdPrice, 300);
-      }
-
-      // 3. Calculate SOL/Fiat prices
-      const results = usdtResults.map(price => price * solUsdPrice);
-      const sorted = results.sort((a, b) => a - b);
-      
-      const median = sorted.length % 2 === 1
-        ? sorted[Math.floor(sorted.length / 2)]
-        : (sorted[sorted.length / 2] + sorted[sorted.length / 2 - 1]) / 2;
-
-      const cacheKey = `prices/SOL/${fiat.toUpperCase()}/${type.toUpperCase()}`;
-      cache.set(cacheKey, [sorted[0], median, sorted[sorted.length - 1]], 3600);
-      
-      console.log(`Successfully cached ${results.length} SOL/${fiat} ${type} prices`);
-    } catch (error) {
-      console.error(`Error calculating SOL prices for ${fiat} ${type}:`, error.message);
-    }
-  }
-  async getSOLUSDTPrice() {
-    try {
-      const { data } = await axios.get(`${this.SPOT_URL}?symbol=SOLUSDT`);
-      const price = parseFloat(data.price);
-      if (isNaN(price)) {
-        console.error('Invalid SOL/USDT price received from Binance:', data);
-        return null;
-      }
-      return price;
-    } catch (error) {
-      console.error('Error fetching SOL/USDT price:', error.message);
+      console.error(`Error fetching ${token}/${fiat} ${type} prices:`, error);
       return null;
     }
+  }
+
+  async fetchAllPrices(tokens, fiats) {
+    const results = [];
+    
+    for (const token of tokens) {
+      for (const fiat of fiats) {
+        try {
+          const [buyPrices, sellPrices] = await Promise.all([
+            this.fetchPrices(token.symbol, fiat.code, 'BUY'),
+            this.fetchPrices(token.symbol, fiat.code, 'SELL')
+          ]);
+          
+          results.push({ 
+            token: token.symbol, 
+            fiat: fiat.code, 
+            success: !!(buyPrices && sellPrices),
+            buyPrices,
+            sellPrices
+          });
+        } catch (error) {
+          results.push({ 
+            token: token.symbol, 
+            fiat: fiat.code, 
+            success: false, 
+            error: error.message 
+          });
+        }
+        await this.sleep(this.RETRY_DELAY);
+      }
+    }
+    
+    return results;
   }
 }
 
