@@ -615,17 +615,22 @@ async function fetchedListLoop(element, banksIds = null) {
           console.log('CoinGecko Price:', spotPrice);
       } 
       // Use Binance if allowed
-      else {
-          const type = element.dataValues.type === 'SellList' ? 'BUY' : 'SELL';
-          const cacheKey = `prices/${tokenData.dataValues.symbol.toUpperCase()}/${fiatCurrencyData.dataValues.code.toUpperCase()}/${type}`;
-          const prices = cache.get(cacheKey);
-          console.log('Binance Cache Key:', cacheKey);
-          console.log('Binance Prices:', prices);
+// Use Binance if allowed
+else {
+  const type = element.dataValues.type === 'SellList' ? 'BUY' : 'SELL';
+  const cacheKey = `prices/${tokenData.dataValues.symbol.toUpperCase()}/${fiatCurrencyData.dataValues.code.toUpperCase()}/${type}`;
+  const prices = cache.get(cacheKey);
+  console.log('Binance Cache Key:', cacheKey);
+  console.log('Binance Prices:', prices);
 
-          if (prices && Array.isArray(prices)) {
-              spotPrice = prices[1]; // Use median price (index 1)
-          }
-      }
+  if (prices && Array.isArray(prices)) {
+      spotPrice = prices[1]; // Use median price (index 1)
+  } else {
+      // Fallback to fixed price if Binance prices are unavailable
+      spotPrice = parseFloat(element.dataValues.price);
+      console.log('Falling back to fixed price:', spotPrice);
+  }
+}
 
       if (spotPrice && spotPrice > 0 && element.dataValues.margin_type === 1) {
           const margin = parseFloat(element.dataValues.margin);
