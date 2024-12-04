@@ -127,3 +127,26 @@ exports.inspectCache = async (req, res) => {
         return errorResponse(res, httpCodes.serverError, Messages.systemError);
     }
 };
+
+exports.getPairPrice = (req, res) => {
+    const { token, fiat } = req.params;
+    try {
+        const buyKey = `prices/${token.toUpperCase()}/${fiat.toUpperCase()}/BUY`;
+        const sellKey = `prices/${token.toUpperCase()}/${fiat.toUpperCase()}/SELL`;
+        
+        res.json({
+            buy: {
+                prices: cache.get(buyKey),
+                ttl: cache.getTtl(buyKey),
+                age: Math.round((Date.now() - cache.getTtl(buyKey)) / 1000)
+            },
+            sell: {
+                prices: cache.get(sellKey),
+                ttl: cache.getTtl(sellKey),
+                age: Math.round((Date.now() - cache.getTtl(sellKey)) / 1000)
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};

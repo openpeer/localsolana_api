@@ -102,7 +102,10 @@ const createRouter = (io) => {
     router.get('/prices', pricesController.fetchData);
 
     // inspect the cache
-    // router.get('/cache/inspect', pricesController.inspectCache);
+    router.get('/prices/cache/inspect', pricesController.inspectCache);
+
+    // Add this new route for getting specific pair prices
+    router.get('/prices/price/:token/:fiat', pricesController.getPairPrice);
 
     router.get('/quickBuy', quickBuyController.quickBuy);
 
