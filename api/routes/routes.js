@@ -7,7 +7,8 @@ const settingsController = require('../../controllers/settings.controller');
 const ordersController = require('../../controllers/orders.controller');
 const disputesController = require('../../controllers/disputes.controller');
 const fiatController = require('../../controllers/fiatCurrencies.controller');
-const listController = require('../../controllers/lists.controller');
+const listController = require('../../controllers/lists');
+
 const tokenController = require('../../controllers/tokens.controller');
 const loginController = require('../../controllers/login.controller');
 const bankController = require('../../controllers/banks.controller');
