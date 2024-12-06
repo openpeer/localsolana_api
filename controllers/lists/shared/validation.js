@@ -23,10 +23,10 @@ exports.validateListPrice = (margin_type, price, margin) => {
         error: "Price is required for fixed rate listings" 
       };
     }
-    if (margin !== null) {
+    if (margin === null) {
       return { 
         isValid: false, 
-        error: "Margin must be null for fixed rate listings" 
+        error: "Margin should be 0 for fixed rate listings" 
       };
     }
   }

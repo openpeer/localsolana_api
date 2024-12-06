@@ -49,6 +49,10 @@ exports.updateList = async (req, res) => {
       return errorResponse(res, httpCodes.badReq, Messages.listNotFound);
     }
 
+    if (margin_type === 0) { // Fixed rate
+      margin = 0;
+    }
+
     // Update list fields
     Object.assign(fetchedList, {
       chain_id,
