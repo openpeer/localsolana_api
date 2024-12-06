@@ -13,7 +13,12 @@ async function fetchBanksData(bankIds) {
       banksData.push({
         id: bank.dataValues.id,
         name: bank.dataValues.name,
-        color: bank.dataValues.color
+        color: bank.dataValues.color,
+        account_info_schema: bank.dataValues.account_info_schema || [],
+        image: bank.dataValues.image,
+        imageUrl: bank.dataValues.image ? 
+          `${process.env.BANK_IMAGES_BASE_URL}/${bank.dataValues.image}` : 
+          null
       });
     }
   }
