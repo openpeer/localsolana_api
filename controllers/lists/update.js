@@ -53,6 +53,12 @@ exports.updateList = async (req, res) => {
       margin = 0;
     }
 
+    // Add this before Object.assign
+    console.log('Update payload:', {
+      total_available_amount,
+      type: typeof total_available_amount
+    });
+
     // Update list fields
     Object.assign(fetchedList, {
       chain_id,
@@ -102,6 +108,10 @@ exports.updateList = async (req, res) => {
     }
 
     const updatedList = await fetchedList.save();
+
+    // And after
+    console.log('List after update:', fetchedList.dataValues);
+
     return successResponse(res, Messages.updatedList, updatedList);
   } catch (error) {
     console.error(error);
