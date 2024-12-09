@@ -21,7 +21,6 @@ exports.updateList = async (req, res) => {
     limit_min,
     limit_max,
     margin_type,
-    margin,
     terms,
     automatic_approval,
     status,
@@ -36,6 +35,7 @@ exports.updateList = async (req, res) => {
     price,
     payment_methods,
   } = req.body;
+  let { margin } = req.body;
   const { user } = req;
 
   try {
