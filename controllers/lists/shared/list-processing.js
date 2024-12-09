@@ -107,6 +107,9 @@ exports.processListData = async function(list, bankIds = null) {
     if (!userData) return null;
 
     const calculatedPrice = await calculateListingPrice(list.dataValues, fiatCurrency, token);
+    if (!calculatedPrice) {
+      console.error(`Failed to calculate price for list ${list.dataValues.id}. Price source: ${list.dataValues.price_source}`);
+    }
 
     // For BuyLists, use banks as payment methods
     const paymentMethods = list.dataValues.type === "BuyList" ? 
@@ -129,7 +132,7 @@ exports.processListData = async function(list, bankIds = null) {
       accept_only_verified: list.dataValues.accept_only_verified,
       escrow_type: list.dataValues.escrow_type,
       price_source: list.dataValues.price_source,
-      calculatedPrice: calculatedPrice || list.dataValues.margin,
+      calculatedPrice: calculatedPrice || 'N/A',
       token,
       fiat_currency: fiatCurrency,
       seller: userData,
