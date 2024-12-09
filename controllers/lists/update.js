@@ -35,7 +35,10 @@ exports.updateList = async (req, res) => {
     price,
     payment_methods,
   } = req.body;
-  let { margin } = req.body;
+  
+  // Initialize margin with a default value of 0 for fixed rate
+  let margin = margin_type === 0 ? 0 : req.body.margin;
+
   const { user } = req;
 
   try {
@@ -48,16 +51,6 @@ exports.updateList = async (req, res) => {
     if (!fetchedList) {
       return errorResponse(res, httpCodes.badReq, Messages.listNotFound);
     }
-
-    if (margin_type === 0) { // Fixed rate
-      margin = 0;
-    }
-
-    // Add this before Object.assign
-    console.log('Update payload:', {
-      total_available_amount,
-      type: typeof total_available_amount
-    });
 
     // Update list fields
     Object.assign(fetchedList, {
