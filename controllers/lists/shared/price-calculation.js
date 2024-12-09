@@ -53,13 +53,8 @@ exports.calculateListingPrice = async (list, fiatCurrency, token) => {
   }
 
   if (!spotPrice) {
-    console.log(`Using fixed price for ${fiatCurrency.dataValues.code} as no dynamic price available`);
-    if (list.margin_type === 1) {
-      // For floating rate, apply margin to the fixed price
-      const margin = parseFloat(list.margin);
-      return applyMarginToPrice(parseFloat(list.price), margin);
-    }
-    return parseFloat(list.price);
+    console.error(`No price available for ${fiatCurrency.dataValues.code} from source ${list.price_source}`);
+    return null;
   }
 
   // Apply margin if using floating rate
