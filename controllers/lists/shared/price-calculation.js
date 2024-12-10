@@ -63,16 +63,18 @@ exports.calculateListingPrice = async function(listData, fiatCurrency, token) {
     return null;
   }
 
-  // Apply margin if using floating rate
-  if (spotPrice > 0 && listData.margin_type === 1) {
-    const margin = parseFloat(listData.margin);
-    spotPrice = applyMarginToPrice(spotPrice, margin);
+  // For fixed rate, return the stored price
+  if (listData.margin_type === 0) {
+    return parseFloat(listData.price);
   }
 
-  const result = parseFloat(listData.price);
+  // For floating rate, apply margin to spot price
+  if (spotPrice > 0) {
+    const margin = parseFloat(listData.margin);
+    return applyMarginToPrice(spotPrice, margin);
+  }
 
-  console.log('Calculated price result:', result);
-  return result;
+  return null;
 };
 
 // Additional utility functions for price-related operations
