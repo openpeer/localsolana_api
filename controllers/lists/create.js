@@ -36,24 +36,31 @@ exports.createList = async function (req, res) {
   } = req.body;
 
   try {
+    // Check if user is authenticated
+    if (!req.user) {
+      return errorResponse(res, httpCodes.unauthorized, "User not authenticated");
+    }
+
     const priceValidation = validateListPrice(margin_type, price, margin);
     if (!priceValidation.isValid) {
       return errorResponse(res, httpCodes.badReq, priceValidation.error);
     }
 
+    const defaultChainId = 1;
+    
     const list = await models.lists.create({
-      chain_id,
-      seller_id,
+      chain_id: chain_id || defaultChainId,
+      seller_id: req.user.id,
       token_id,
       fiat_currency_id,
       total_available_amount,
       limit_min,
       limit_max,
       margin_type,
-      margin,
+      margin: margin_type === 0 ? 0 : margin, // Set margin to 0 for fixed rate
       terms,
       automatic_approval,
-      status,
+      status: 1,  // Always set status to 1 for new lists
       payment_method_id,
       type,
       bank_id,
@@ -65,10 +72,10 @@ exports.createList = async function (req, res) {
       price,
     });
 
-    if (type === "BuyList") {
+    if (type === "BuyList" && payment_methods?.length > 0) {
       await handleBuyListPaymentMethods(list.dataValues.id, payment_methods);
-    } else if (type === "SellList") {
-      await handleSellListPaymentMethods(list.dataValues.id, seller_id, payment_methods);
+    } else if (type === "SellList" && payment_methods?.length > 0) {
+      await handleSellListPaymentMethods(list.dataValues.id, req.user.id, payment_methods);
     }
 
     return successResponse(res, Messages.createdList, list);
