@@ -45,11 +45,20 @@ class BinancePriceService {
     try {
       // First get USDT price for the fiat
       const usdtResults = await this.fetchPrices('USDT', fiat, type);
-      if (!usdtResults) return null;
+      if (!usdtResults || !Array.isArray(usdtResults)) {
+        console.error(`Failed to fetch USDT/${fiat} ${type} prices`);
+        return null;
+      }
 
       // Then get SOL/USDT spot price
       const spotResponse = await axios.get(`${this.SPOT_URL}?symbol=SOLUSDT`);
+      if (!spotResponse?.data?.price) {
+        console.error('Failed to fetch SOL/USDT spot price');
+        return null;
+      }
+
       const solUsdtPrice = parseFloat(spotResponse.data.price);
+      console.log(`SOL/USDT spot price: ${solUsdtPrice}`);
 
       // Calculate SOL prices in fiat
       const [min, median, max] = usdtResults;
@@ -61,6 +70,8 @@ class BinancePriceService {
 
       const cacheKey = `prices/SOL/${fiat}/${type}`;
       cache.set(cacheKey, results, this.CACHE_TTL);
+      console.log(`Cached SOL/${fiat} ${type} prices:`, results);
+      
       return results;
     } catch (error) {
       console.error('Error fetching SOL prices:', error);
@@ -70,21 +81,38 @@ class BinancePriceService {
 
   async fetchPrices(token, fiat, type) {
     try {
-      // Check cache first with age verification
       const cacheKey = `prices/${token.toUpperCase()}/${fiat.toUpperCase()}/${type.toUpperCase()}`;
       const cachedValue = cache.get(cacheKey);
       
-      if (cachedValue) {
+      if (cachedValue && (Array.isArray(cachedValue) || typeof cachedValue === 'number')) {
         const cacheAge = (Date.now() - cache.getTtl(cacheKey)) / 1000;
         if (cacheAge < this.CACHE_TTL) {
-          console.log(`Using cached prices for ${token}/${fiat} ${type} (age: ${Math.round(cacheAge)}s)`);
           return cachedValue;
-        } else {
-          console.log(`Cache expired for ${token}/${fiat} ${type} (age: ${Math.round(cacheAge)}s)`);
         }
       }
 
-      // Special handling for SOL
+      // Try to fetch new prices
+      const newPrices = await this._fetchFreshPrices(token, fiat, type, cacheKey);
+      if (newPrices) {
+        return newPrices;
+      }
+
+      // If fetch failed but we have old cached values, use them anyway
+      if (cachedValue) {
+        console.log(`Using stale cache for ${token}/${fiat} ${type} as fallback`);
+        return cachedValue;
+      }
+
+      return null;
+    } catch (error) {
+      console.error(`Error in fetchPrices for ${token}/${fiat} ${type}:`, error);
+      return null;
+    }
+  }
+
+  async _fetchFreshPrices(token, fiat, type, cacheKey) {
+    try {
+      // Special handling for SOL regardless of allow_binance_rates flag
       if (token.toUpperCase() === 'SOL') {
         return this.fetchSOLPrices(fiat, type);
       }
@@ -95,7 +123,7 @@ class BinancePriceService {
       const firstPage = await this.searchBinanceWithRetry(token, fiat, type, 1);
       if (!firstPage?.data) {
         console.error(`No initial data found for ${token}/${fiat} ${type}`);
-        return;
+        return null;
       }
       
       results.push(...firstPage.data.map(ad => parseFloat(ad.adv.price)));
@@ -117,9 +145,12 @@ class BinancePriceService {
         }
       }
 
-      if (results.length < this.MIN_PRICE_POINTS) {
-        console.error(`Insufficient price points for ${token}/${fiat} ${type}. Found: ${results.length}, Required: ${this.MIN_PRICE_POINTS}`);
-        return;
+      // Reduce minimum price points requirement for less liquid pairs
+      const minPoints = ['VES', 'COP', 'PEN', 'KES', 'MAD', 'EGP'].includes(fiat.toUpperCase()) ? 3 : this.MIN_PRICE_POINTS;
+      
+      if (results.length < minPoints) {
+        console.error(`Insufficient price points for ${token}/${fiat} ${type}. Found: ${results.length}, Required: ${minPoints}`);
+        return null;
       }
 
       const sorted = results.sort((a, b) => a - b);
@@ -133,7 +164,7 @@ class BinancePriceService {
       console.log(`Successfully cached ${results.length} prices for ${token}/${fiat} ${type}`);
       return finalResults;
     } catch (error) {
-      console.error(`Error fetching ${token}/${fiat} ${type} prices:`, error);
+      console.error(`Error in _fetchFreshPrices for ${token}/${fiat} ${type}:`, error);
       return null;
     }
   }
