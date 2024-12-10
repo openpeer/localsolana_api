@@ -29,17 +29,23 @@ const applyMarginToPrice = (spotPrice, margin) => {
   return spotPrice + ((spotPrice * margin) / 100);
 };
 
-exports.calculateListingPrice = async (list, fiatCurrency, token) => {
+exports.calculateListingPrice = async function(listData, fiatCurrency, token) {
+  console.log('Calculating price for:', {
+    listData,
+    fiatCurrency: fiatCurrency?.dataValues,
+    token: token?.dataValues
+  });
+  
   if (!fiatCurrency || !token) {
     console.error('Missing required data for price calculation:', { fiatCurrency, token });
-    return parseFloat(list.price);
+    return parseFloat(listData.price);
   }
 
   // Determine which price source to use
-  const canUseBinance = list.price_source === 1 && 
+  const canUseBinance = listData.price_source === 1 && 
     fiatCurrency.dataValues.allow_binance_rates === true;
 
-  const useCoingecko = list.price_source === 2 && 
+  const useCoingecko = listData.price_source === 2 && 
     token.dataValues.coingecko_id && 
     isCoinGeckoSupported(fiatCurrency.dataValues.code);
 
@@ -47,23 +53,26 @@ exports.calculateListingPrice = async (list, fiatCurrency, token) => {
   let spotPrice = null;
 
   if (canUseBinance) {
-    spotPrice = getPriceFromBinance(token.dataValues, fiatCurrency.dataValues, list.type);
+    spotPrice = getPriceFromBinance(token.dataValues, fiatCurrency.dataValues, listData.type);
   } else if (useCoingecko) {
     spotPrice = getPriceFromCoingecko(token.dataValues, fiatCurrency.dataValues);
   }
 
   if (!spotPrice) {
-    console.error(`No price available for ${fiatCurrency.dataValues.code} from source ${list.price_source}`);
+    console.error(`No price available for ${fiatCurrency.dataValues.code} from source ${listData.price_source}`);
     return null;
   }
 
   // Apply margin if using floating rate
-  if (spotPrice > 0 && list.margin_type === 1) {
-    const margin = parseFloat(list.margin);
-    return applyMarginToPrice(spotPrice, margin);
+  if (spotPrice > 0 && listData.margin_type === 1) {
+    const margin = parseFloat(listData.margin);
+    spotPrice = applyMarginToPrice(spotPrice, margin);
   }
 
-  return parseFloat(list.price);
+  const result = parseFloat(listData.price);
+
+  console.log('Calculated price result:', result);
+  return result;
 };
 
 // Additional utility functions for price-related operations

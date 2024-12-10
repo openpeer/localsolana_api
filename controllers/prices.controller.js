@@ -150,3 +150,19 @@ exports.getPairPrice = (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+const updateCachePrice = async (cacheKey, fetchPriceFunc) => {
+    const currentPrice = cache.get(cacheKey);
+    
+    try {
+        const newPrice = await fetchPriceFunc();
+        if (newPrice) {
+            cache.set(cacheKey, newPrice);
+            return newPrice;
+        }
+        return currentPrice; // Fallback to current price if fetch fails
+    } catch (error) {
+        console.error(`Failed to fetch new price for ${cacheKey}:`, error);
+        return currentPrice; // Keep existing price on error
+    }
+};
