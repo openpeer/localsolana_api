@@ -43,38 +43,53 @@ class BinancePriceService {
 
   async fetchSOLPrices(fiat, type) {
     try {
-      // First get USDT price for the fiat
+      // Get USDT prices with validation
       const usdtResults = await this.fetchPrices('USDT', fiat, type);
-      if (!usdtResults || !Array.isArray(usdtResults)) {
-        console.error(`Failed to fetch USDT/${fiat} ${type} prices`);
+      if (!Array.isArray(usdtResults) || usdtResults.length !== 3) {
+        console.error(`Invalid USDT/${fiat} prices:`, usdtResults);
         return null;
       }
 
-      // Then get SOL/USDT spot price
-      const spotResponse = await axios.get(`${this.SPOT_URL}?symbol=SOLUSDT`);
-      if (!spotResponse?.data?.price) {
-        console.error('Failed to fetch SOL/USDT spot price');
+      // Get SOL/USDT price with retries
+      let solUsdtPrice = null;
+      for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
+        try {
+          const spotResponse = await axios.get(`${this.SPOT_URL}?symbol=SOLUSDT`);
+          if (spotResponse?.data?.price) {
+            solUsdtPrice = parseFloat(spotResponse.data.price);
+            break;
+          }
+        } catch (error) {
+          console.error(`SOL/USDT spot price fetch attempt ${attempt} failed:`, error.message);
+          if (attempt < this.MAX_RETRIES) {
+            await this.sleep(this.RETRY_DELAY);
+          }
+        }
+      }
+
+      if (!solUsdtPrice) {
+        console.error('Failed to fetch SOL/USDT price after all retries');
         return null;
       }
 
-      const solUsdtPrice = parseFloat(spotResponse.data.price);
-      console.log(`SOL/USDT spot price: ${solUsdtPrice}`);
-
-      // Calculate SOL prices in fiat
-      const [min, median, max] = usdtResults;
-      const results = [
-        min * solUsdtPrice,
-        median * solUsdtPrice,
-        max * solUsdtPrice
-      ];
+      // Calculate with precision handling
+      const results = usdtResults.map(price => {
+        const calculated = price * solUsdtPrice;
+        return Number(calculated.toFixed(4)); // Prevent floating point issues
+      });
 
       const cacheKey = `prices/SOL/${fiat}/${type}`;
       cache.set(cacheKey, results, this.CACHE_TTL);
-      console.log(`Cached SOL/${fiat} ${type} prices:`, results);
+      
+      console.log(`Cached SOL/${fiat} ${type} prices:`, {
+        usdtPrices: usdtResults,
+        solUsdtPrice,
+        finalPrices: results
+      });
       
       return results;
     } catch (error) {
-      console.error('Error fetching SOL prices:', error);
+      console.error('Error in fetchSOLPrices:', error);
       return null;
     }
   }
@@ -200,6 +215,54 @@ class BinancePriceService {
     }
     
     return results;
+  }
+
+  validatePriceSet(prices, token, fiat) {
+    if (!Array.isArray(prices) || prices.length !== 3) {
+      return false;
+    }
+
+    // Check for valid numbers
+    if (!prices.every(p => typeof p === 'number' && !isNaN(p) && p > 0)) {
+      return false;
+    }
+
+    // Check price variance (max 15% spread between min and max)
+    const [min, med, max] = prices;
+    const spread = ((max - min) / min) * 100;
+    if (spread > 15) {
+      console.warn(`High price spread (${spread.toFixed(2)}%) for ${token}/${fiat}`);
+      return false;
+    }
+
+    // Verify median is between min and max
+    if (med < min || med > max) {
+      return false;
+    }
+
+    return true;
+  }
+}
+
+class CacheMonitor {
+  constructor() {
+    this.failureCount = new Map();
+    this.lastSuccess = new Map();
+  }
+
+  recordSuccess(cacheKey) {
+    this.failureCount.delete(cacheKey);
+    this.lastSuccess.set(cacheKey, Date.now());
+  }
+
+  recordFailure(cacheKey) {
+    const count = (this.failureCount.get(cacheKey) || 0) + 1;
+    this.failureCount.set(cacheKey, count);
+    
+    if (count >= 3) {
+      console.error(`Critical: Multiple failures for ${cacheKey}`);
+      // Implement alerting system here
+    }
   }
 }
 

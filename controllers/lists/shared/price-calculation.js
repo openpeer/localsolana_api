@@ -7,36 +7,29 @@ const getPriceFromBinance = (token, fiatCurrency, listType) => {
   const cacheKey = `prices/${token.symbol.toUpperCase()}/${fiatCurrency.code.toUpperCase()}/${type}`;
   const prices = cache.get(cacheKey);
 
-  console.log('Binance price debug:', {
-    cacheKey,
-    hasPrices: prices !== null,
-    pricesIsArray: Array.isArray(prices),
-    prices
+  // Add more detailed logging
+  console.log('Cache state for key:', cacheKey, {
+    rawValue: prices,
+    cacheExists: cache.has(cacheKey),
+    timestamp: Date.now()
   });
 
-  // If we have a valid array of prices, use median
-  if (Array.isArray(prices) && prices.length > 0) {
-    return prices[Math.floor(prices.length / 2)]; // Use median price
+  // Validate cache data more strictly
+  if (!prices || (Array.isArray(prices) && prices.length === 0)) {
+    console.error(`Invalid or empty cache for key: ${cacheKey}`);
+    return null;
   }
 
-  // If we have a single numeric price, use that
+  // Handle array vs single price cases
+  if (Array.isArray(prices)) {
+    return prices[Math.floor(prices.length / 2)];
+  }
+
   if (typeof prices === 'number' && !isNaN(prices)) {
     return prices;
   }
 
-  // Try alternate cache key without type
-  const altKey = `prices/${token.symbol.toUpperCase()}/${fiatCurrency.code.toUpperCase()}`;
-  const altPrices = cache.get(altKey);
-  
-  if (Array.isArray(altPrices) && altPrices.length > 0) {
-    return altPrices[Math.floor(altPrices.length / 2)];
-  }
-  
-  if (typeof altPrices === 'number' && !isNaN(altPrices)) {
-    return altPrices;
-  }
-
-  console.error(`Cache miss for Binance prices: ${cacheKey}`);
+  console.error(`Unexpected price format for key ${cacheKey}:`, prices);
   return null;
 };
 
