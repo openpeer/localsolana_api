@@ -67,7 +67,7 @@ exports.createList = async function (req, res) {
       deposit_time_limit,
       payment_time_limit,
       accept_only_verified,
-      escrow_type,
+      escrow_type: escrow_type || 0,  // Explicitly set default to manual (0)
       price_source,
       price,
     });
