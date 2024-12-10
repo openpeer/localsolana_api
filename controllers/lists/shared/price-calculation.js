@@ -7,9 +7,32 @@ const getPriceFromBinance = (token, fiatCurrency, listType) => {
   const cacheKey = `prices/${token.symbol.toUpperCase()}/${fiatCurrency.code.toUpperCase()}/${type}`;
   const prices = cache.get(cacheKey);
 
+  console.log('Binance price debug:', {
+    cacheKey,
+    hasPrices: prices !== null,
+    pricesIsArray: Array.isArray(prices),
+    prices: prices // Log actual prices for debugging
+  });
+
+  // If we have valid array prices, use them
   if (prices && Array.isArray(prices)) {
     return prices[1]; // Use median price
   }
+
+  // Try alternate cache key format
+  const altKey = `prices/${token.symbol.toUpperCase()}/${fiatCurrency.code.toUpperCase()}`;
+  const altPrices = cache.get(altKey);
+  
+  if (altPrices) {
+    console.log(`Found price in alternate cache key: ${altKey}`, altPrices);
+    return typeof altPrices === 'number' ? altPrices : null;
+  }
+
+  // If we have a single numeric price, use that
+  if (typeof prices === 'number') {
+    return prices;
+  }
+
   console.error(`Cache miss for Binance prices: ${cacheKey}`);
   return null;
 };
@@ -26,7 +49,7 @@ const getPriceFromCoingecko = (token, fiatCurrency) => {
 };
 
 const applyMarginToPrice = (spotPrice, margin) => {
-  return spotPrice + ((spotPrice * margin) / 100);
+  return spotPrice * parseFloat(margin);
 };
 
 exports.calculateListingPrice = async function(listData, fiatCurrency, token) {
