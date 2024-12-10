@@ -38,7 +38,7 @@ const getPriceFromCoingecko = (token, fiatCurrency) => {
   const price = cache.get(cacheKey);
 
   if (!price) {
-    console.log(`Using fixed price for ${fiatCurrency.code} as CoinGecko price not available`);
+    console.log(`Checking CoinGecko cache for ${cacheKey}`);
     return null;
   }
   return price;
@@ -64,7 +64,7 @@ exports.calculateListingPrice = async function(listData, fiatCurrency, token) {
   const canUseBinance = listData.price_source === 1 && 
     fiatCurrency.dataValues.allow_binance_rates === true;
 
-  const useCoingecko = listData.price_source === 2 && 
+  const useCoingecko = listData.price_source === 0 && 
     token.dataValues.coingecko_id && 
     isCoinGeckoSupported(fiatCurrency.dataValues.code);
 

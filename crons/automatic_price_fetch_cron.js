@@ -64,10 +64,14 @@ class AutomaticPriceFetcher {
         
         // Cache each coin-currency pair
         Object.keys(prices).forEach((coin) => {
-          const currencyCount = Object.keys(prices[coin]).length;
-          console.log(chalk.cyan(`  ${coin}:`), 
-            chalk.green(`${currencyCount} pairs cached`)
-          );
+          Object.keys(prices[coin]).forEach((curr) => {
+            // Use coingecko_id in lowercase for consistency
+            const cacheKey = `prices/${coin.toLowerCase()}/${curr.toLowerCase()}`;
+            cache.set(cacheKey, prices[coin][curr]);
+            console.log(chalk.cyan(`  ${cacheKey}:`), 
+              chalk.green(prices[coin][curr])
+            );
+          });
         });
       }
     } catch (error) {
