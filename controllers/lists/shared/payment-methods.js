@@ -6,12 +6,21 @@ const { sequelize } = require('../../../models');
 exports.handleBuyListPaymentMethods = async (listId, paymentMethods) => {
   if (!paymentMethods || paymentMethods.length === 0) return;
 
-  const newBanksData = paymentMethods.map((data) => ({
-    list_id: listId,
-    bank_id: data.bank.id,
-  }));
+  // Filter out any payment methods that would result in null bank_ids
+  const validBanksData = paymentMethods
+    .map((data) => {
+      const bankId = data.bank_id || data.id || (data.bank && data.bank.id);
+      if (!bankId) return null;
+      return {
+        list_id: listId,
+        bank_id: bankId,
+      };
+    })
+    .filter(item => item !== null);
 
-  await sequelize.getQueryInterface().bulkInsert("lists_banks", newBanksData);
+  if (validBanksData.length > 0) {
+    await sequelize.getQueryInterface().bulkInsert("lists_banks", validBanksData);
+  }
 };
 
 exports.handleSellListPaymentMethods = async (listId, sellerId, paymentMethods) => {
