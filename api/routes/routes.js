@@ -74,7 +74,7 @@ const createRouter = (io) => {
     router.post('/deleteFiatCurrency/:id', fiatController.deleteFiatCurrency);
 
     // Routes for the Lists
-    router.post('/createList', listController.createList);
+    router.post('/createList', authenticateToken, listController.createList);
     router.get('/getLists', listController.getAllLists);
     router.get('/lists/ads',authenticateToken, listController.fetchMyAds);
     router.get('/lists/:id', listController.getList);
