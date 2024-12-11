@@ -60,9 +60,15 @@ exports.calculateListingPrice = async function(listData, fiatCurrency, token) {
     return parseFloat(listData.price);
   }
 
+  // For fixed rate, return the stored price immediately
+  if (listData.margin_type === 0) {
+    return parseFloat(listData.price);
+  }
+
   // Determine which price source to use
-  const canUseBinance = listData.price_source === 1 && 
-    fiatCurrency.dataValues.allow_binance_rates === true;
+  const useBinance = listData.price_source === 1 && 
+    fiatCurrency.dataValues.allow_binance_rates === true &&
+    token.dataValues.allow_binance_rates === true;
 
   const useCoingecko = listData.price_source === 0 && 
     token.dataValues.coingecko_id && 
@@ -71,7 +77,7 @@ exports.calculateListingPrice = async function(listData, fiatCurrency, token) {
   // Get spot price based on source
   let spotPrice = null;
 
-  if (canUseBinance) {
+  if (useBinance) {
     spotPrice = getPriceFromBinance(token.dataValues, fiatCurrency.dataValues, listData.type);
   } else if (useCoingecko) {
     spotPrice = getPriceFromCoingecko(token.dataValues, fiatCurrency.dataValues);
@@ -82,18 +88,9 @@ exports.calculateListingPrice = async function(listData, fiatCurrency, token) {
     return null;
   }
 
-  // For fixed rate, return the stored price
-  if (listData.margin_type === 0) {
-    return parseFloat(listData.price);
-  }
-
   // For floating rate, apply margin to spot price
-  if (spotPrice > 0) {
-    const margin = parseFloat(listData.margin);
-    return applyMarginToPrice(spotPrice, margin);
-  }
-
-  return null;
+  const margin = parseFloat(listData.margin);
+  return applyMarginToPrice(spotPrice, margin);
 };
 
 // Additional utility functions for price-related operations
