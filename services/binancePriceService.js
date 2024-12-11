@@ -43,49 +43,38 @@ class BinancePriceService {
 
   async fetchSOLPrices(fiat, type) {
     try {
-      // Get USDT prices with validation
+      // Check if we have valid cached prices
+      const cacheKey = `prices/SOL/${fiat}/${type}`;
+      const cachedPrices = cache.get(cacheKey);
+      
+      if (cachedPrices) {
+        return cachedPrices;
+      }
+
+      // If no cache, calculate from USDT prices
       const usdtResults = await this.fetchPrices('USDT', fiat, type);
       if (!Array.isArray(usdtResults) || usdtResults.length !== 3) {
         console.error(`Invalid USDT/${fiat} prices:`, usdtResults);
         return null;
       }
 
-      // Get SOL/USDT price with retries
-      let solUsdtPrice = null;
-      for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
-        try {
-          const spotResponse = await axios.get(`${this.SPOT_URL}?symbol=SOLUSDT`);
-          if (spotResponse?.data?.price) {
-            solUsdtPrice = parseFloat(spotResponse.data.price);
-            break;
-          }
-        } catch (error) {
-          console.error(`SOL/USDT spot price fetch attempt ${attempt} failed:`, error.message);
-          if (attempt < this.MAX_RETRIES) {
-            await this.sleep(this.RETRY_DELAY);
-          }
-        }
-      }
-
-      if (!solUsdtPrice) {
-        console.error('Failed to fetch SOL/USDT price after all retries');
+      // Get SOL/USDT price from cache instead of Binance API
+      const solUsdtCache = cache.get('prices/SOL/USDT/SPOT');
+      if (!solUsdtCache) {
+        console.error('No cached SOL/USDT spot price available');
         return null;
       }
 
+      const solUsdtPrice = solUsdtCache.value;
+      
       // Calculate with precision handling
       const results = usdtResults.map(price => {
         const calculated = price * solUsdtPrice;
-        return Number(calculated.toFixed(4)); // Prevent floating point issues
+        return Number(calculated.toFixed(4));
       });
 
-      const cacheKey = `prices/SOL/${fiat}/${type}`;
+      // Cache the results
       cache.set(cacheKey, results, this.CACHE_TTL);
-      
-      console.log(`Cached SOL/${fiat} ${type} prices:`, {
-        usdtPrices: usdtResults,
-        solUsdtPrice,
-        finalPrices: results
-      });
       
       return results;
     } catch (error) {
