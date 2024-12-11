@@ -5,24 +5,25 @@ const Messages = require('../../utils/messages');
 const httpCodes = require('../../utils/httpCodes');
 
 exports.deleteList = async (req, res) => {
-  const { id } = req.params;
-  const { user } = req;
-  
   try {
-    const fetchedList = await models.lists.findByPk(id);
-    if (!fetchedList) {
-      return errorResponse(res, httpCodes.badReq, Messages.listNotFound);
-    }
-    
-    if (fetchedList.dataValues.seller_id == user.dataValues.id) {
-      fetchedList.set("status", 2);
-      await fetchedList.save();
-      return successResponse(res, Messages.deletedSuccessfully);
-    } else {
-      return errorResponse(res, httpCodes.forbidden, Messages.NoAccess);
-    }
+    // Begin transaction
+    await models.sequelize.transaction(async (t) => {
+      // First delete related payment methods
+      await models.lists_payment_methods.destroy({
+        where: { list_id: req.params.id },
+        transaction: t
+      });
+
+      // Then delete the list
+      await models.lists.destroy({
+        where: { id: req.params.id },
+        transaction: t
+      });
+    });
+
+    res.json({ success: true });
   } catch (error) {
-    console.error(error);
-    return errorResponse(res, httpCodes.serverError, Messages.systemError);
+    console.error('Error deleting list:', error);
+    res.status(500).json({ error: 'Failed to delete list' });
   }
 };
