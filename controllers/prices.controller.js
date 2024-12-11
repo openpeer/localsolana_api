@@ -116,18 +116,26 @@ exports.inspectCache = async (req, res) => {
     try {
         const allCacheKeys = cache.keys();
         const cacheContents = {};
+        const now = Date.now();
         
         for (const key of allCacheKeys) {
-            cacheContents[key] = cache.get(key);
+            const value = cache.get(key);
+            const ttl = cache.getTtl(key);
+            
+            cacheContents[key] = {
+                value: value,
+                ttl: ttl,
+                timeLeft: ttl ? Math.round((ttl - now) / 1000) : null, // Time left in seconds
+                age: ttl ? Math.round((now - ttl) / 1000) : null // Age in seconds
+            };
         }
         
-        return successResponse(res, "Cache contents", cacheContents);
+        return successResponse(res, "Cache contents with TTL information", cacheContents);
     } catch (error) {
         console.error("Cache inspection error:", error);
         return errorResponse(res, httpCodes.serverError, Messages.systemError);
     }
 };
-
 exports.getPairPrice = (req, res) => {
     const { token, fiat } = req.params;
     try {
