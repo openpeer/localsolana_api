@@ -3,18 +3,10 @@ const { ShyftSdk,Network } = require('@shyft-to/js');
 
 let shyftInstance;
 
-function getShyftInstance() {
-    if (!shyftInstance) {
-        shyftInstance = new ShyftSdk({
-            apiKey: process.env.SHYFT_API_KEY,
-            network: getShyftNetwork(process.env.SOLANA_NETWORK), // Convert string to Network enum
-          });
-    }
-    return shyftInstance;
-}
-
 // Helper function to convert string network to ShyftSdk Network enum
-const getShyftNetwork = (network) => {
+const getShyftNetwork = (network = 'devnet') => {
+    if (!network) return Network.Devnet; // Default fallback
+    
     switch (network.toLowerCase()) {
       case "mainnet-beta":
       case "mainnet":
@@ -24,9 +16,25 @@ const getShyftNetwork = (network) => {
       case "testnet":
         return Network.Testnet;
       default:
-        return Network.Devnet; // Default to devnet if unknown
+        return Network.Devnet;
     }
-  };
+};
+
+function getShyftInstance() {
+    if (!shyftInstance) {
+        if (!process.env.SHYFT_API_KEY) {
+            throw new Error('SHYFT_API_KEY is not set in environment variables');
+        }
+        
+        const network = process.env.SOLANA_NETWORK || 'devnet';
+        
+        shyftInstance = new ShyftSdk({
+            apiKey: process.env.SHYFT_API_KEY,
+            network: getShyftNetwork(network),
+        });
+    }
+    return shyftInstance;
+}
 
 module.exports = {
     getShyftInstance,
