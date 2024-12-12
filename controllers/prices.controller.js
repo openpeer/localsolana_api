@@ -118,6 +118,7 @@ exports.inspectCache = async (req, res) => {
         const cacheContents = {};
         const now = Date.now();
         
+        // Get standard cache contents first
         for (const key of allCacheKeys) {
             const value = cache.get(key);
             const ttl = cache.getTtl(key);
@@ -125,9 +126,42 @@ exports.inspectCache = async (req, res) => {
             cacheContents[key] = {
                 value: value,
                 ttl: ttl,
-                timeLeft: ttl ? Math.round((ttl - now) / 1000) : null, // Time left in seconds
-                age: ttl ? Math.round((now - ttl) / 1000) : null // Age in seconds
+                timeLeft: ttl ? Math.round((ttl - now) / 1000) : null,
+                age: ttl ? Math.round((now - ttl) / 1000) : null
             };
+        }
+
+        // Add calculated Solana prices section
+        const solUsdtCache = cache.get('prices/SOL/USDT/SPOT');
+        if (solUsdtCache) {
+            const solanaCalculations = {
+                spotPrice: solUsdtCache.value,
+                calculatedPrices: {}
+            };
+
+            // Get all USDT prices for Binance-supported currencies
+            for (const key of allCacheKeys) {
+                if (key.match(/^prices\/USDT\/[A-Z]+\/(BUY|SELL)$/)) {
+                    const [, , fiat, type] = key.split('/');
+                    const usdtPrices = cache.get(key);
+                    
+                    if (Array.isArray(usdtPrices) && usdtPrices.length === 3) {
+                        const calculated = usdtPrices.map(price => 
+                            Number((price * solUsdtCache.value).toFixed(4))
+                        );
+                        
+                        solanaCalculations.calculatedPrices[`SOL/${fiat}/${type}`] = {
+                            calculated,
+                            basedOn: {
+                                usdtPrices,
+                                solUsdtRate: solUsdtCache.value
+                            }
+                        };
+                    }
+                }
+            }
+
+            cacheContents['_solanaCalculations'] = solanaCalculations;
         }
         
         return successResponse(res, "Cache contents with TTL information", cacheContents);

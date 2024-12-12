@@ -43,8 +43,7 @@ class BinancePriceService {
 
   async fetchSOLPrices(fiat, type) {
     try {
-      // Check if we have valid cached prices
-      const cacheKey = `prices/SOL/${fiat}/${type}`;
+      const cacheKey = `_solanaCalculations/SOL/${fiat}/${type}`;
       const cachedPrices = cache.get(cacheKey);
       
       if (cachedPrices) {
@@ -53,30 +52,40 @@ class BinancePriceService {
 
       // If no cache, calculate from USDT prices
       const usdtResults = await this.fetchPrices('USDT', fiat, type);
-      if (!Array.isArray(usdtResults) || usdtResults.length !== 3) {
+      
+      console.log(`Debug - USDT Results for ${fiat}/${type}:`, usdtResults);
+      
+      // Special handling for less liquid pairs - accept any non-empty array
+      const isLessLiquidPair = ['VES', 'COP', 'PEN', 'KES', 'MAD', 'EGP'].includes(fiat.toUpperCase());
+      if (!Array.isArray(usdtResults) || 
+          (!isLessLiquidPair && usdtResults.length !== 3) || 
+          (isLessLiquidPair && usdtResults.length === 0)) {
         console.error(`Invalid USDT/${fiat} prices:`, usdtResults);
         return null;
       }
 
-      // Get SOL/USDT price from cache instead of Binance API
-      const solUsdtCache = cache.get('prices/SOL/USDT/SPOT');
-      if (!solUsdtCache) {
-        console.error('No cached SOL/USDT spot price available');
+      const solUsdPrice = cache.get('prices/solana/usd');
+      if (!solUsdPrice) {
+        console.error('No cached SOL/USD spot price available');
         return null;
       }
 
-      const solUsdtPrice = solUsdtCache.value;
+      console.log(`Debug - SOL/USD price:`, solUsdPrice);
       
-      // Calculate with precision handling
-      const results = usdtResults.map(price => {
-        const calculated = price * solUsdtPrice;
-        return Number(calculated.toFixed(4));
-      });
-
-      // Cache the results
-      cache.set(cacheKey, results, this.CACHE_TTL);
+      // For less liquid pairs, use median price if available
+      const medianIndex = Math.floor(usdtResults.length / 2);
+      const medianPrice = usdtResults[medianIndex];
+      console.log(`Debug - Calculating with median price:`, medianPrice);
       
-      return results;
+      // Calculate single value with appropriate decimal places
+      const decimalPlaces = ['COP', 'VES', 'KES'].includes(fiat.toUpperCase()) ? 2 : 4;
+      const calculated = Number((medianPrice * solUsdPrice).toFixed(decimalPlaces));
+      
+      // Store the value in the expected format (single value)
+      cache.set(cacheKey, calculated, this.CACHE_TTL);
+      
+      // Return in the format expected by the rest of the system (array)
+      return [calculated, calculated, calculated];
     } catch (error) {
       console.error('Error in fetchSOLPrices:', error);
       return null;
