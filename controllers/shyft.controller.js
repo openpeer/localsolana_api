@@ -32,6 +32,7 @@ exports.processTransaction = async (req, res) => {
     }
   }
   try {
+    console.log("SOLANA_NETWORK:", process.env.SOLANA_NETWORK);
     const signature = await getShyftInstance().txnRelayer.sign({
       encodedTransaction: transaction,
       network: getShyftNetwork(process.env.SOLANA_NETWORK),

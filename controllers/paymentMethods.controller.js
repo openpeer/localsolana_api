@@ -31,18 +31,23 @@ exports.paymentMethods =  async (req, res) => {
   exports.getPaymentMethods =  async (req, res) => {
     const { id } = req.params;
     try {
-      let paymentMethods = await models.payment_methods.findOne({
+      let paymentMethods = await models.payment_methods.findAll({
         where: {
           user_id: id
-        }
+        },
+        include: [{
+          model: models.banks,
+          attributes: ['id', 'name', 'color', 'image', 'account_info_schema']
+        }]
       });
-      if (!paymentMethods) {
-        return errorResponse(res, httpCodes.badReq,Messages.noPaymentMethods);
+
+      if (!paymentMethods || paymentMethods.length === 0) {
+        return errorResponse(res, httpCodes.badReq, Messages.noPaymentMethods);
       }
-      console.log("getPaymentMethods", paymentMethods);
+
       return successResponse(res, Messages.paymentMethods, paymentMethods);
     } catch (error) {
       console.error(error);
-      return errorResponse(res, httpCodes.serverError,Messages.systemError);
+      return errorResponse(res, httpCodes.serverError, Messages.systemError);
     }
   };
