@@ -27,38 +27,33 @@ async function fetchBanksData(bankIds) {
 
 async function fetchPaymentMethods(listId) {
   try {
-    // Get payment method IDs
     const paymentMethodIds = await models.lists_payment_methods.findAll({
       attributes: ['payment_method_id'],
       where: { list_id: listId }
     });
     
-    // DEBUG: Let's see what we're getting
-    console.log('Payment Method IDs:', JSON.stringify(paymentMethodIds, null, 2));
-
     const paymentMethods = [];
     for (const item of paymentMethodIds) {
-      // DEBUG: Log each item
-      console.log('Processing payment method:', item.payment_method_id);
-      
       const method = await models.payment_methods.findByPk(item.payment_method_id);
-      console.log('Found method:', JSON.stringify(method?.dataValues, null, 2));
       
       if (method && method.dataValues.bank_id) {
         const bank = await models.banks.findByPk(method.dataValues.bank_id);
-        console.log('Found bank:', JSON.stringify(bank?.dataValues, null, 2));
         
         if (bank) {
           paymentMethods.push({
             id: bank.dataValues.id,
             name: bank.dataValues.name,
-            color: bank.dataValues.color
+            color: bank.dataValues.color,
+            account_info_schema: bank.dataValues.account_info_schema || [],
+            image: bank.dataValues.image,
+            imageUrl: bank.dataValues.image ? 
+              `${process.env.BANK_IMAGES_BASE_URL}/${bank.dataValues.image}` : 
+              null
           });
         }
       }
     }
     
-    console.log('Final payment methods:', JSON.stringify(paymentMethods, null, 2));
     return paymentMethods;
   } catch (error) {
     console.error('Error in fetchPaymentMethods:', error);
