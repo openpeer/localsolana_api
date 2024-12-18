@@ -90,6 +90,23 @@ async function fetchUserData(sellerId, chainId) {
 
 exports.processListData = async function(list, bankIds = null) {
   try {
+    // For SellLists, get bank IDs from payment methods
+    if (list.dataValues.type === "SellList" && !bankIds) {
+      const paymentMethodIds = await models.lists_payment_methods.findAll({
+        attributes: ['payment_method_id'],
+        where: { list_id: list.dataValues.id }
+      });
+      
+      const bankIdsFromPaymentMethods = [];
+      for (const item of paymentMethodIds) {
+        const method = await models.payment_methods.findByPk(item.payment_method_id);
+        if (method && method.dataValues.bank_id) {
+          bankIdsFromPaymentMethods.push(method.dataValues.bank_id);
+        }
+      }
+      bankIds = bankIdsFromPaymentMethods;
+    }
+
     const banksData = await fetchBanksData(bankIds);
     
     const fiatCurrency = list.dataValues.fiat_currency_id ? 
