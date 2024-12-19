@@ -13,6 +13,8 @@ class BinancePriceService {
     this.CACHE_TTL = 1800; // 30 minutes
     this.MAX_CONCURRENT_REQUESTS = 1;
     this.cleanupSolanaCache();
+    this.priceFailureLog = [];
+    this.MAX_FAILURE_LOG_SIZE = 1000; // Keep last 1000 failures
   }
 
   async sleep(ms) {
@@ -45,56 +47,110 @@ class BinancePriceService {
   async fetchSOLPrices(fiat, type) {
     try {
       const cacheKey = `_solanaCalculations/SOL/${fiat}/${type}`;
-      const cachedPrices = cache.get(cacheKey);
+      const cachedPrice = cache.get(cacheKey);
       
-      if (cachedPrices && cachedPrices.value !== undefined) {
-        console.log(`Returning cached SOL price for ${fiat}/${type}:`, cachedPrices.value);
-        return cachedPrices.value;
+      if (typeof cachedPrice === 'number' && !isNaN(cachedPrice)) {
+        console.log(`Returning cached SOL price for ${fiat}/${type}:`, cachedPrice);
+        return cachedPrice;
       }
 
-      // If no cache, calculate from USDT prices
-      const usdtResults = await this.fetchPrices('USDT', fiat, type);
-      console.log(`Debug - USDT Results for ${fiat}/${type}:`, usdtResults);
-      
-      if (!Array.isArray(usdtResults) || usdtResults.length === 0) {
-        console.error(`Invalid USDT/${fiat} prices:`, usdtResults);
-        return null;
-      }
+      // Ensure we have both required prices before calculation
+      const [usdtResults, solUsdPrice] = await Promise.all([
+        this.ensureUSDTPrices(fiat, type),
+        this.ensureSOLUSDPrice()
+      ]);
 
-      const solUsdPrice = cache.get('prices/solana/usd');
-      if (!solUsdPrice) {
-        console.error('No cached SOL/USD spot price available');
-        return null;
-      }
-
-      console.log(`Debug - SOL/USD price:`, solUsdPrice);
-      
-      // Calculate median price
-      const medianIndex = Math.floor(usdtResults.length / 2);
-      const medianPrice = usdtResults[medianIndex];
-      
-      // Calculate final price with appropriate decimal places
-      const decimalPlaces = ['COP', 'VES', 'KES'].includes(fiat.toUpperCase()) ? 2 : 4;
-      const calculated = Number((medianPrice * solUsdPrice).toFixed(decimalPlaces));
-      
-      if (isNaN(calculated)) {
-        console.error('Error calculating SOL price:', {
-          medianPrice,
-          solUsdPrice,
-          calculated
+      if (!usdtResults || !solUsdPrice) {
+        this.logPriceFailure({
+          token: 'SOL',
+          fiat,
+          type,
+          reason: 'Missing required prices',
+          details: {
+            hasUsdtResults: !!usdtResults,
+            hasSolUsdPrice: !!solUsdPrice,
+            usdtResults,
+            solUsdPrice
+          }
         });
         return null;
       }
 
-      // Cache the calculated price
-      cache.set(cacheKey, calculated, this.CACHE_TTL);
-      console.log(`Cached new SOL price for ${fiat}/${type}:`, calculated);
-      
+      // Calculate and verify the result
+      const medianIndex = Math.floor(usdtResults.length / 2);
+      const medianPrice = usdtResults[medianIndex];
+      const decimalPlaces = ['COP', 'VES', 'KES'].includes(fiat.toUpperCase()) ? 2 : 4;
+      const calculated = Number((medianPrice * solUsdPrice).toFixed(decimalPlaces));
+
+      if (isNaN(calculated) || calculated <= 0) {
+        this.logPriceFailure({
+          token: 'SOL',
+          fiat,
+          type,
+          reason: 'Invalid calculation result',
+          details: { medianPrice, solUsdPrice, calculated }
+        });
+        return null;
+      }
+
+      // Store the calculated price directly as a number
+      const cacheSuccess = cache.set(cacheKey, calculated, this.CACHE_TTL);
+      if (!cacheSuccess) {
+        this.logPriceFailure({
+          token: 'SOL',
+          fiat,
+          type,
+          reason: 'Failed to cache calculation',
+          details: { cacheKey, calculated }
+        });
+      } else {
+        console.log(`Successfully cached SOL price for ${fiat}/${type}:`, calculated);
+      }
+
       return calculated;
     } catch (error) {
-      console.error('Error in fetchSOLPrices:', error);
+      this.logPriceFailure({
+        token: 'SOL',
+        fiat,
+        type,
+        reason: 'Error in fetchSOLPrices',
+        error: error.message,
+        stack: error.stack
+      });
       return null;
     }
+  }
+
+  async ensureUSDTPrices(fiat, type) {
+    const cacheKey = `prices/USDT/${fiat}/${type}`;
+    let prices = cache.get(cacheKey);
+    
+    if (!prices || !Array.isArray(prices) || prices.length === 0) {
+      console.log(`Fetching fresh USDT prices for ${fiat}/${type}`);
+      prices = await this._fetchFreshPrices('USDT', fiat, type, cacheKey);
+    }
+
+    return prices;
+  }
+
+  async ensureSOLUSDPrice() {
+    const cacheKey = 'prices/solana/usd';
+    let price = cache.get(cacheKey);
+    
+    if (!price) {
+      try {
+        const response = await axios.get(`${this.SPOT_URL}?symbol=SOLUSDT`);
+        price = parseFloat(response.data.price);
+        if (!isNaN(price)) {
+          cache.set(cacheKey, price, this.CACHE_TTL);
+        }
+      } catch (error) {
+        console.error('Error fetching SOL/USD spot price:', error);
+        return null;
+      }
+    }
+
+    return price;
   }
 
   async fetchPrices(token, fiat, type) {
@@ -264,6 +320,78 @@ class BinancePriceService {
       }
     } catch (error) {
       console.error('Error cleaning up Solana cache:', error);
+    }
+  }
+
+  logPriceFailure(details) {
+    const failureEntry = {
+      timestamp: new Date().toISOString(),
+      ...details,
+      cache_state: this.getCacheState(details)
+    };
+
+    // Add to in-memory log
+    this.priceFailureLog.unshift(failureEntry);
+    if (this.priceFailureLog.length > this.MAX_FAILURE_LOG_SIZE) {
+      this.priceFailureLog.pop();
+    }
+
+    // Log to file system
+    this.persistFailureLog(failureEntry);
+    
+    console.error('Price Failure:', failureEntry);
+  }
+
+  getCacheState(details) {
+    const cacheState = {};
+    
+    // Check relevant cache keys
+    if (details.token === 'SOL') {
+      const solUsdKey = 'prices/solana/usd';
+      cacheState.solUsdPrice = {
+        exists: cache.has(solUsdKey),
+        value: cache.get(solUsdKey)
+      };
+    }
+
+    // Check USDT price cache
+    const usdtKey = `prices/USDT/${details.fiat}/${details.type}`;
+    cacheState.usdtPrices = {
+      exists: cache.has(usdtKey),
+      value: cache.get(usdtKey)
+    };
+
+    // Check final calculation cache
+    const calcKey = `_solanaCalculations/SOL/${details.fiat}/${details.type}`;
+    cacheState.calculation = {
+      exists: cache.has(calcKey),
+      value: cache.get(calcKey)
+    };
+
+    return cacheState;
+  }
+
+  async persistFailureLog(entry) {
+    try {
+      const fs = require('fs').promises;
+      const path = require('path');
+      const logDir = path.join(__dirname, '../logs/price_failures');
+      
+      // Ensure log directory exists
+      await fs.mkdir(logDir, { recursive: true });
+      
+      // Create daily log file
+      const date = new Date().toISOString().split('T')[0];
+      const logFile = path.join(logDir, `price_failures_${date}.jsonl`);
+      
+      // Append to log file
+      await fs.appendFile(
+        logFile, 
+        JSON.stringify(entry) + '\n',
+        'utf8'
+      );
+    } catch (error) {
+      console.error('Failed to persist price failure log:', error);
     }
   }
 }
