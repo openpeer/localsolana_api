@@ -72,6 +72,52 @@ exports.fetchData = async (req, res) => {
                 return errorResponse(res, httpCodes.badReq, "Invalid trade type. Must be BUY or SELL");
             }
 
+            // Special handling for SOL prices
+            if (token.toUpperCase() === 'SOL') {
+                const solCacheKey = `_solanaCalculations/SOL/${fiat.toUpperCase()}/${type.toUpperCase()}`;
+                const solPrice = cache.get(solCacheKey);
+                
+                // Handle both new (direct number) and old (nested object) formats
+                const priceValue = typeof solPrice === 'number' ? 
+                    solPrice : 
+                    (solPrice?.value?.value || solPrice?.value);
+                
+                if (priceValue !== undefined && !isNaN(priceValue)) {
+                    return successResponse(res, Messages.success, { 
+                        [token]: { [fiat]: priceValue }
+                    });
+                }
+
+                // If no cached price, try to fetch fresh SOL prices
+                try {
+                    const freshSolPrice = await binancePriceService.fetchSOLPrices(fiat, type.toUpperCase());
+                    if (freshSolPrice) {
+                        return successResponse(res, Messages.success, { 
+                            [token]: { [fiat]: freshSolPrice }
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error fetching SOL prices:', error);
+                }
+
+                // If we still don't have a price, try the USDT calculation path
+                const usdtKey = `prices/USDT/${fiat.toUpperCase()}/${type.toUpperCase()}`;
+                const solUsdKey = 'prices/solana/usd';
+                const usdtPrices = cache.get(usdtKey);
+                const solUsdPrice = cache.get(solUsdKey);
+
+                if (usdtPrices && solUsdPrice) {
+                    const medianIndex = Math.floor(usdtPrices.length / 2);
+                    const calculatedPrice = Number((usdtPrices[medianIndex] * solUsdPrice).toFixed(4));
+                    
+                    if (!isNaN(calculatedPrice)) {
+                        return successResponse(res, Messages.success, { 
+                            [token]: { [fiat]: calculatedPrice }
+                        });
+                    }
+                }
+            }
+
             // Try to get Binance prices from cache
             const cacheKey = `prices/${token.toUpperCase()}/${fiat.toUpperCase()}/${type.toUpperCase()}`;
             const binancePrices = cache.get(cacheKey);

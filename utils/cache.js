@@ -12,8 +12,9 @@ const cache = new NodeCache({
    * @returns {number|null} - The cached price or null if not found.
    */
  const getCachedPrice = function(id, currency) {
-    console.log('getCachedPrice', id, currency);
-      const cacheKey = `prices/${id.toLowerCase()}/${currency.toLowerCase()}`;
-      return cache.get(cacheKey) || null;
+    const cacheKey = `prices/${id.toLowerCase()}/${currency.toLowerCase()}`;
+    const price = cache.get(cacheKey);
+    console.log(`Getting cached price for ${cacheKey}:`, price);
+    return price || null;
   };
 module.exports = {cache,getCachedPrice};
