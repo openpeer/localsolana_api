@@ -166,8 +166,8 @@ exports.calculateListingPrice = async function(listData, fiatCurrency, token) {
     }
 
     // Apply margin
-    const margin = Number(listData.margin) / 100;
-    const finalPrice = Number((basePrice * (1 + margin)).toFixed(getDecimalPlaces(fiatCurrency.code)));
+    const margin = Number(listData.margin);
+    const finalPrice = Number((basePrice * margin).toFixed(getDecimalPlaces(fiatCurrency.code)));
 
     console.log('Price calculation result:', {
       basePrice,
