@@ -86,7 +86,17 @@ exports.getbanks = async (req, res) => {
               id: bankId.bank_id
             }
           });
-          particularBanks.dataValues["icon"] = `${BANK_IMAGES_BASE_URL}/${particularBanks.image}`;
+          
+          // Consistently set both icon and imageUrl
+          if (particularBanks.image) {
+            const fullImageUrl = `${BANK_IMAGES_BASE_URL}/${particularBanks.image}`;
+            particularBanks.dataValues.icon = fullImageUrl;
+            particularBanks.dataValues.imageUrl = fullImageUrl;
+          } else {
+            particularBanks.dataValues.icon = null;
+            particularBanks.dataValues.imageUrl = null;
+          }
+          
           banksList.push(particularBanks);
         }
       } else {
