@@ -194,9 +194,35 @@ class BinancePriceService {
       const results = [];
       
       // Fetch first page
-      const firstPage = await this.searchBinanceWithRetry(token, fiat, type, 1);
+      let firstPage;
+      try {
+        firstPage = await this.searchBinanceWithRetry(token, fiat, type, 1);
+      } catch (error) {
+        this.logPriceFailure({
+          token,
+          fiat,
+          type,
+          reason: 'Failed to fetch first page from Binance P2P',
+          details: {
+            error: error.message,
+            retries: this.MAX_RETRIES,
+            endpoint: this.BASE_URL
+          }
+        });
+        return null;
+      }
+
       if (!firstPage?.data) {
-        console.error(`No initial data found for ${token}/${fiat} ${type}`);
+        this.logPriceFailure({
+          token,
+          fiat,
+          type,
+          reason: 'No orders found on Binance P2P',
+          details: {
+            responseData: firstPage,
+            searchParams: { token, fiat, type }
+          }
+        });
         return null;
       }
       
@@ -205,17 +231,24 @@ class BinancePriceService {
         Math.ceil(firstPage.total / this.PER_PAGE),
         Math.ceil(this.MAX_PRICE_POINTS / this.PER_PAGE)
       );
+
+      // Log initial results info
+      console.log(`Found ${firstPage.total} total orders, fetching up to ${totalPages} pages`);
       
       // Fetch remaining pages until MAX_PRICE_POINTS
       for (let page = 2; page <= totalPages; page++) {
         if (results.length >= this.MAX_PRICE_POINTS) break;
         
-        const pageResult = await this.searchBinanceWithRetry(token, fiat, type, page);
-        if (pageResult?.data) {
-          results.push(...pageResult.data
-            .map(ad => parseFloat(ad.adv.price))
-            .slice(0, this.MAX_PRICE_POINTS - results.length)
-          );
+        try {
+          const pageResult = await this.searchBinanceWithRetry(token, fiat, type, page);
+          if (pageResult?.data) {
+            results.push(...pageResult.data
+              .map(ad => parseFloat(ad.adv.price))
+              .slice(0, this.MAX_PRICE_POINTS - results.length)
+            );
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch page ${page}, continuing with existing results`);
         }
       }
 
@@ -223,7 +256,19 @@ class BinancePriceService {
       const minPoints = ['VES', 'COP', 'PEN', 'KES', 'MAD', 'EGP'].includes(fiat.toUpperCase()) ? 3 : this.MIN_PRICE_POINTS;
       
       if (results.length < minPoints) {
-        console.error(`Insufficient price points for ${token}/${fiat} ${type}. Found: ${results.length}, Required: ${minPoints}`);
+        this.logPriceFailure({
+          token,
+          fiat,
+          type,
+          reason: 'Insufficient price points',
+          details: {
+            found: results.length,
+            required: minPoints,
+            prices: results,
+            totalListings: firstPage.total,
+            pagesChecked: totalPages
+          }
+        });
         return null;
       }
 
@@ -232,13 +277,57 @@ class BinancePriceService {
         ? sorted[Math.floor(sorted.length / 2)]
         : (sorted[sorted.length / 2] + sorted[sorted.length / 2 - 1]) / 2;
 
+      // Validate the price spread
+      const spread = ((sorted[sorted.length - 1] - sorted[0]) / sorted[0]) * 100;
+      if (spread > 200) { // Warning threshold for extreme spreads
+        console.warn(`High price spread of ${spread.toFixed(1)}% for ${token}/${fiat} ${type}`);
+      }
+
       const finalResults = [sorted[0], median, sorted[sorted.length - 1]];
-      cache.set(cacheKey, finalResults, this.CACHE_TTL);
       
-      console.log(`Successfully cached ${results.length} prices for ${token}/${fiat} ${type}`);
+      // Validate final results before caching
+      if (!this.validatePriceSet(finalResults, token, fiat)) {
+        this.logPriceFailure({
+          token,
+          fiat,
+          type,
+          reason: 'Price validation failed',
+          details: {
+            prices: finalResults,
+            spread: spread.toFixed(1) + '%',
+            sampleSize: results.length
+          }
+        });
+        return null;
+      }
+
+      const cacheSuccess = cache.set(cacheKey, finalResults, this.CACHE_TTL);
+      if (!cacheSuccess) {
+        this.logPriceFailure({
+          token,
+          fiat,
+          type,
+          reason: 'Cache write failed',
+          details: { cacheKey, finalResults }
+        });
+      } else {
+        console.log(`Successfully cached ${results.length} prices for ${token}/${fiat} ${type}`);
+      }
+      
       return finalResults;
     } catch (error) {
-      console.error(`Error in _fetchFreshPrices for ${token}/${fiat} ${type}:`, error);
+      this.logPriceFailure({
+        token,
+        fiat,
+        type,
+        reason: 'Unexpected error in price fetching',
+        error: error.message,
+        stack: error.stack,
+        details: {
+          endpoint: this.BASE_URL,
+          parameters: { token, fiat, type }
+        }
+      });
       return null;
     }
   }
