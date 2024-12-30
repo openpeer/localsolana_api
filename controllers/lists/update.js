@@ -52,38 +52,31 @@ exports.updateList = async (req, res) => {
       return errorResponse(res, httpCodes.badReq, Messages.listNotFound);
     }
 
-    // Update list fields
-    Object.assign(fetchedList, {
-      chain_id,
-      seller_id,
-      token_id,
-      fiat_currency_id,
-      total_available_amount,
-      limit_min: limit_min === '' ? null : limit_min,
-      limit_max: limit_max === '' ? null : limit_max,
+    // Update list fields with only the provided values
+    const updateFields = {
       margin_type,
       margin,
-      terms,
-      automatic_approval,
       status,
-      payment_method_id,
       type,
-      bank_id,
-      deposit_time_limit,
-      payment_time_limit,
-      accept_only_verified,
       escrow_type,
       price_source,
       price
-    });
+    };
 
-    if (type === "BuyList" && payment_methods.length > 0) {
+    // Remove undefined values
+    Object.keys(updateFields).forEach(key => 
+      updateFields[key] === undefined && delete updateFields[key]
+    );
+
+    Object.assign(fetchedList, updateFields);
+
+    if (type === "BuyList" && payment_methods?.length > 0) {
       // Delete existing banks
       await models.lists_banks.destroy({
         where: { list_id }
       });
       await handleBuyListPaymentMethods(list_id, payment_methods);
-    } else if (type === "SellList" && payment_methods.length > 0) {
+    } else if (type === "SellList" && payment_methods?.length > 0) {
       // Get and delete existing payment methods
       const existingPaymentMethodIds = await models.lists_payment_methods.findAll({
         where: { list_id },
