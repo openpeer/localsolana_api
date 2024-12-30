@@ -86,7 +86,7 @@ exports.fetchMyAds = async (req, res) => {
       order: [["created_at", "DESC"]],
       where: {
         seller_id: userData.dataValues.id,
-        status: { [Op.eq]: 1 },
+        status: { [Op.in]: [0, 1] },
         type: { [Op.ne]: null }
       }
     });
@@ -94,7 +94,7 @@ exports.fetchMyAds = async (req, res) => {
     const totalRecords = await models.lists.count({
       where: {
         seller_id: userData.dataValues.id,
-        status: { [Op.eq]: 1 },
+        status: { [Op.in]: [0, 1] },
         type: { [Op.ne]: null }
       }
     });
