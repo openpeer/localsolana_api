@@ -54,19 +54,8 @@ exports.updateList = async (req, res) => {
 
     // Update list fields with only the provided values
     const updateFields = {
-      margin_type,
-      margin,
-      status,
-      type,
-      escrow_type,
-      price_source,
-      price
+      status: status
     };
-
-    // Remove undefined values
-    Object.keys(updateFields).forEach(key => 
-      updateFields[key] === undefined && delete updateFields[key]
-    );
 
     Object.assign(fetchedList, updateFields);
 
@@ -97,6 +86,26 @@ exports.updateList = async (req, res) => {
 
     // And after
     console.log('List after update:', fetchedList.dataValues);
+
+    return successResponse(res, Messages.updatedList, updatedList);
+  } catch (error) {
+    console.error(error);
+    return errorResponse(res, httpCodes.serverError, Messages.systemError);
+  }
+};
+
+exports.updateListStatus = async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  try {
+    const fetchedList = await models.lists.findByPk(id);
+    if (!fetchedList) {
+      return errorResponse(res, httpCodes.badReq, Messages.listNotFound);
+    }
+
+    fetchedList.status = status;
+    const updatedList = await fetchedList.save();
 
     return successResponse(res, Messages.updatedList, updatedList);
   } catch (error) {

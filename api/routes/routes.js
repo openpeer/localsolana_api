@@ -80,6 +80,7 @@ const createRouter = (io) => {
     router.get('/lists/:id', listController.getList);
     router.get('/getListsCount', listController.getListsCount);
     router.put('/list_management/:id',authenticateToken, (req, res) =>listController.updateList(req, res));
+    router.patch('/list_management/:id',authenticateToken, listController.updateListStatus);
     router.delete('/list_management/:id',authenticateToken, listController.deleteList);
     router.get('/lists', listController.fetchListForParticularUser);
 
