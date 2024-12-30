@@ -49,10 +49,10 @@ module.exports = (sequelize) => {
     available_from: DataTypes.NUMBER,
     available_to: DataTypes.NUMBER,
     contract_address: DataTypes.STRING,
-    weeekend_offline: {
+    weekend_offline: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
-      field: 'weekend_offline' // Maps to the database column 'created_at'
+      field: 'weekend_offline'
     },
     createdAt: {
       type: DataTypes.DATE,
