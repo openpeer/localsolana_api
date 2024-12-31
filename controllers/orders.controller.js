@@ -326,7 +326,8 @@ exports.createOrder = async function (req, res) {
     console.log("paymentMethod", paymentMethod);
     const createOrderObject = {
       list_id,
-      buyer_id: list.type == "SellList"?user.dataValues.id:list.dataValues.seller_id,
+      buyer_id: list.type == "BuyList" ? list.dataValues.seller_id : user.dataValues.id,
+      seller_id: list.type == "BuyList" ? user.dataValues.id : list.dataValues.seller_id,
       fiat_amount,
       status: 0,
       token_amount,
@@ -335,7 +336,6 @@ exports.createOrder = async function (req, res) {
       cancelled_by_id: null,
       cancelled_at: null,
       trade_id: "",
-      seller_id: list.type == "SellList"?list.dataValues.seller_id:user.dataValues.id,
       payment_method_id: paymentMethod.dataValues.id,
       deposit_time_limit: list.dataValues.deposit_time_limit,
       payment_time_limit: list.dataValues.payment_time_limit,
