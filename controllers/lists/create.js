@@ -76,6 +76,7 @@ exports.createList = async function (req, res) {
       await handleBuyListPaymentMethods(list.dataValues.id, payment_methods);
     } else if (type === "SellList" && payment_methods?.length > 0) {
       await handleSellListPaymentMethods(list.dataValues.id, req.user.id, payment_methods);
+      console.log('Payment methods being saved:', payment_methods);
     }
 
     return successResponse(res, Messages.createdList, list);

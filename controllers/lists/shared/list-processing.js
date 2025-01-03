@@ -40,6 +40,7 @@ async function fetchPaymentMethods(listId) {
         const bank = await models.banks.findByPk(method.dataValues.bank_id);
         
         if (bank) {
+          console.log('Found payment method:', method.dataValues);
           paymentMethods.push({
             id: bank.dataValues.id,
             name: bank.dataValues.name,
@@ -48,7 +49,8 @@ async function fetchPaymentMethods(listId) {
             image: bank.dataValues.image,
             imageUrl: bank.dataValues.image ? 
               `${process.env.BANK_IMAGES_BASE_URL}/${bank.dataValues.image}` : 
-              null
+              null,
+            values: method.dataValues.values
           });
         }
       }
