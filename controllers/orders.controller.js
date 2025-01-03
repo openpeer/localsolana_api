@@ -70,7 +70,26 @@ async function fetchedOrderLoop(item) {
     if (paymentMethod) {
       const bank = await models.banks.findByPk(paymentMethod.dataValues.bank_id);
       paymentMethod.dataValues['bank'] = bank;
+
+      // Find and copy seller's payment method values
+      const sellerPaymentMethod = await models.payment_methods.findOne({
+        where: {
+          user_id: item.dataValues.seller_id,
+          bank_id: paymentMethod.dataValues.bank_id,
+          type: 'ListPaymentMethod'
+        }
+      });
+
+      if (sellerPaymentMethod && sellerPaymentMethod.values) {
+        // Update the order's payment method with seller's values
+        await models.payment_methods.update(
+          { values: sellerPaymentMethod.values },
+          { where: { id: paymentMethod.id } }
+        );
+        paymentMethod.dataValues.values = sellerPaymentMethod.values;
+      }
     }
+
     item.dataValues['list'] = list;
     item.dataValues['seller'] = seller;
     item.dataValues['buyer'] = buyer;
@@ -288,40 +307,43 @@ exports.cancelOrder = async (req, res, io) => {
 
 // method for craeting new order
 exports.createOrder = async function (req, res) {
-  const { list_id, buyer_id, fiat_amount, token_amount, price, payment_method
-  } = req.body;
+  const { list_id, buyer_id, fiat_amount, token_amount, price, payment_method } = req.body;
   try {
     let user = await models.user.findOne({
       where: {
         address: buyer_id
       }
-    })
+    });
+    
     let list = await models.lists.findOne({
       where: {
         id: list_id,
         status: {
-          [Op.notIn]: [0, 2], // Exclude status 0 and 2(Hidden and deleted status)
+          [Op.notIn]: [0, 2]
         }
       }
-    })
-    let bankID = null;
-    if (list.type == "SellList") {
-      let paymentMethod = await models.payment_methods.findOne({
-        where: {
-          id: payment_method.id
-        }
-      })
-      bankID = paymentMethod.bank_id;
-    } else {
-      bankID = payment_method.bank.id;
-    }
-    const payment_method_details=await models.payment_methods.findByPk(payment_method?.id);
+    });
+
+    // First find the seller's payment method for this bank
+    const sellerPaymentMethod = await models.payment_methods.findOne({
+      where: {
+        user_id: list.seller_id,
+        bank_id: payment_method.bank_id,
+        type: 'ListPaymentMethod'
+      }
+    });
+
+    console.log("Seller's payment method:", sellerPaymentMethod?.dataValues);
+
+    let bankID = payment_method.bank_id;
     let paymentMethodData = {
       user_id: user.dataValues.id,
       bank_id: bankID,
       type: 'OrderPaymentMethod',
-      values: (payment_method.values)?payment_method.values:payment_method_details?.values
-    }
+      // Copy the seller's payment method values
+      values: sellerPaymentMethod?.dataValues?.values || {}
+    };
+
     const paymentMethod = await models.payment_methods.create(paymentMethodData);
     console.log("paymentMethod", paymentMethod);
     const createOrderObject = {
