@@ -15,28 +15,40 @@ const logFormat = winston.format.combine(
   })
 );
 
+// Get log level from environment, default to 'info' in development and 'error' in production
+const LOG_LEVEL = process.env.ESCROW_LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'error' : 'info');
+
 // Create the escrow logger
 const escrowLogger = winston.createLogger({
+  level: LOG_LEVEL,
   format: logFormat,
-  transports: [
-    new winston.transports.File({ 
-      filename: path.join(__dirname, '../logs/escrow-error.log'),
-      level: 'error'
-    }),
-    new winston.transports.File({ 
-      filename: path.join(__dirname, '../logs/escrow-combined.log')
-    })
-  ]
+  transports: []
 });
 
-// Add console transport in development
-if (process.env.NODE_ENV !== 'production') {
+// In production, only log to stdout/stderr
+if (process.env.NODE_ENV === 'production') {
   escrowLogger.add(new winston.transports.Console({
-    format: winston.format.simple()
+    level: LOG_LEVEL,
+    format: winston.format.json()
+  }));
+} else {
+  // In development/staging, log to files and console
+  escrowLogger.add(new winston.transports.File({ 
+    filename: path.join(__dirname, '../logs/escrow-error.log'),
+    level: 'error'
+  }));
+  escrowLogger.add(new winston.transports.File({ 
+    filename: path.join(__dirname, '../logs/escrow-combined.log'),
+    level: LOG_LEVEL
+  }));
+  escrowLogger.add(new winston.transports.Console({
+    format: winston.format.simple(),
+    level: LOG_LEVEL
   }));
 }
 
 function logEscrowOperation(operation, data) {
+  if (LOG_LEVEL === 'none') return;
   escrowLogger.info({
     operation,
     ...data
@@ -44,6 +56,7 @@ function logEscrowOperation(operation, data) {
 }
 
 function logEscrowError(operation, error, context = {}) {
+  if (LOG_LEVEL === 'none') return;
   const errorDetails = {
     operation,
     error: {
