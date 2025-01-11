@@ -1,25 +1,36 @@
-const models = require("../models/index");
-const resource = require('../resources');
-const bcrypt = require('bcryptjs');
-const session = require('express-session');
-const path = require('path');
+import models from "../models/index";
+import resource from '../resources';
+import bcrypt from 'bcryptjs';
+import session from 'express-session';
+import path from 'path';
+import express from 'express';
+import AdminJS from 'adminjs';
+import { componentLoader } from '../components';
+import AdminJSExpress from '@adminjs/express';
+import { Store } from 'express-session';
+
+// Use require for AdminJS Sequelize since it doesn't have type declarations
+const AdminJSSequelize = require('@adminjs/sequelize');
+
+interface AuthenticatedUser {
+  email: string;
+  role: number;
+  id: string;
+  title: string;
+}
 
 // Integrate AdminJS
-async function setupAdminJS(app, sessionStore) {
-  const AdminJS = (await import("adminjs")).default;
-  const componentLoader = (await import('../components.mjs')).componentLoader;
-  const AdminJSExpress = (await import("@adminjs/express")).default;
-  const AdminJSSequelize = (await import("@adminjs/sequelize")).default;
-
-  const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@example.com';
-  const ADMIN_PASSWORD_HASH = bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'securepassword', 10);
+export async function setupAdminJS(app: express.Application, sessionStore: Store): Promise<void> {
+  const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+  const ADMIN_PASSWORD_HASH = bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10);
 
   AdminJS.registerAdapter({
     Resource: AdminJSSequelize.Resource,
     Database: AdminJSSequelize.Database,
   });
+
   const bankResource = await resource.bank_resource(models.banks, models.fiat_currencies, models.banks_fiat_currencies);
-  const disputeResource=await resource.dispute_resource(models.Dispute, models.user_disputes, models.dispute_files, models.Order);
+  const disputeResource = await resource.dispute_resource(models.Dispute, models.user_disputes, models.dispute_files, models.Order);
 
   // Initialize AdminJS with no resources
   const adminJs = new AdminJS({
@@ -35,28 +46,25 @@ async function setupAdminJS(app, sessionStore) {
     ],
     rootPath: "/admin",
     branding: { companyName: "Local Solana Admin Panel" },
-    componentLoader:componentLoader
+    componentLoader
   });
+
   adminJs.watch();
 
-  // show with authentication
-  
   // Store user role in session
   const adminRouter = AdminJSExpress.buildAuthenticatedRouter(
     adminJs,
     {
-      authenticate: async (email, password) => {
+      authenticate: async (email: string, password: string): Promise<AuthenticatedUser | null> => {
         try {
           let userRole = 0;
-          let authenticatedUser = null;
+          let authenticatedUser: AuthenticatedUser | null = null;
   
           // Check for super admin
           if (email === ADMIN_EMAIL && bcrypt.compareSync(password, ADMIN_PASSWORD_HASH)) {
-            userRole = 1;
             authenticatedUser = { 
               email, 
-              role: userRole,
-              // Add any other properties you want to access in currentAdmin
+              role: 1,
               id: 'admin',
               title: 'Super Admin'
             };
@@ -65,10 +73,9 @@ async function setupAdminJS(app, sessionStore) {
             const adminUser = await models.adminUsers.findOne({ where: { email } });
             
             if (adminUser && bcrypt.compareSync(password, adminUser.encrypted_password)) {
-              userRole = 0;
               authenticatedUser = { 
                 email: adminUser.email, 
-                role: userRole,
+                role: 0,
                 id: adminUser.id,
                 title: 'Regular Admin'
               };
@@ -83,14 +90,14 @@ async function setupAdminJS(app, sessionStore) {
         }
       },
       cookieName: 'adminjs',
-      cookiePassword: process.env.SESSION_KEY,
+      cookiePassword: process.env.SESSION_KEY || 'default-session-key',
     },
     null,
     {
       store: sessionStore, // Use the same session store
       resave: false,
       saveUninitialized: false,
-      secret: process.env.SESSION_KEY,
+      secret: process.env.SESSION_KEY || 'default-session-key',
       cookie: {
         httpOnly: true,
         secure: false,
@@ -102,12 +109,4 @@ async function setupAdminJS(app, sessionStore) {
   );
 
   app.use(adminJs.options.rootPath, adminRouter);
-
-
-  // show without authentication
-  // const adminRouter = AdminJSExpress.buildRouter(adminJs);
-  // app.use(adminJs.options.rootPath, adminRouter);
-
-}
-
-module.exports = { setupAdminJS };
+} 

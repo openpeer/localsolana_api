@@ -9,6 +9,7 @@ const Messages = require("../utils/messages");
 const { logEscrowOperation, logEscrowError } = require("../utils/logger");
 const { PublicKey, Message, Transaction } = require("@solana/web3.js");
 const bs58 = require("bs58");
+const { ProgramService } = require('../services/ProgramService');
 
 async function validateAndLogRawTransaction(transaction) {
   try {
@@ -276,82 +277,59 @@ exports.processTransaction = async (req, res) => {
     return errorResponse(res, httpCodes.badReq, Messages.missingData);
   }
 
-  let order;
-  let list;
-  if (order_id !== undefined) {
-    order = await models.Order.findByPk(order_id);
-    
+  try {
+    // Validate raw transaction first
+    await validateAndLogRawTransaction(transaction);
+
+    // Get all required data
+    const order = await models.Order.findByPk(order_id);
     if (!order) {
-      logEscrowError("processTransaction:orderValidation", new Error("Order not found"), {
-        order_id,
-        user_id: req.user?.dataValues?.id
-      });
-      return errorResponse(res, httpCodes.badReq, Messages.orderNotFound);
+      throw new Error('Order not found');
     }
 
-    list = await models.lists.findByPk(order.dataValues.list_id);
+    const list = await models.lists.findByPk(order.dataValues.list_id);
     const seller = await models.user.findByPk(order.dataValues.seller_id);
     const buyer = await models.user.findByPk(order.dataValues.buyer_id);
     const token = await models.tokens.findByPk(list.dataValues.token_id);
 
     logEscrowOperation("processTransaction:orderDetails", {
-      order_id,
       order_status: order.dataValues.status,
       seller_id: order.dataValues.seller_id,
       buyer_id: order.dataValues.buyer_id,
       seller_address: seller?.dataValues?.address,
-      seller_contract: seller?.dataValues?.contract_address,
       buyer_address: buyer?.dataValues?.address,
       token_amount: order.dataValues.token_amount,
       token_address: token?.dataValues?.address,
-      token_symbol: token?.dataValues?.symbol,
-      list_id: list?.dataValues?.id,
-      escrow_type: list?.dataValues?.escrow_type
+      token_symbol: token?.dataValues?.symbol
     });
 
+    // Authorization check
     if (
       order.dataValues.seller_id !== req.user.dataValues.id &&
       order.dataValues.buyer_id !== req.user.dataValues.id &&
       req.user.dataValues.id !== process.env.ARBITRATOR_ADDRESS
     ) {
-      logEscrowError("processTransaction:authorization", new Error("User not authorized"), {
-        order_id,
-        user_id: req.user?.dataValues?.id,
-        seller_id: order.dataValues.seller_id,
-        buyer_id: order.dataValues.buyer_id
-      });
-      return errorResponse(res, httpCodes.badReq, Messages.notAuthorized);
+      throw new Error("Not authorized");
     }
-  }
 
-  try {
-    // Decode and log transaction details before signing
+    // Build and validate expected transaction
+    const programService = ProgramService.getInstance();
+    const expectedTx = await programService.buildReleaseFundsTransaction({
+      orderId: order_id,
+      seller: new PublicKey(seller.dataValues.address),
+      buyer: new PublicKey(buyer.dataValues.address),
+      token: new PublicKey(token.dataValues.address),
+      order
+    });
+
+    // Decode and log actual transaction
     const decodedTx = await decodeTransaction(transaction);
     logEscrowOperation("processTransaction:decodedTransaction", {
       order_id,
       decoded: decodedTx
     });
 
-    // Get and log account info for all accounts in transaction
-    const connection = getShyftInstance().connection;
-    const accountInfoPromises = decodedTx.accountKeys.map(key => 
-      getAccountInfo(connection, key)
-    );
-    const accountsInfo = await Promise.all(accountInfoPromises);
-
-    logEscrowOperation("processTransaction:accountsInfo", {
-      order_id,
-      accounts: decodedTx.accountKeys.map((key, i) => ({
-        pubkey: key,
-        info: accountsInfo[i]
-      }))
-    });
-
-    logEscrowOperation("processTransaction:signing", {
-      order_id,
-      network: process.env.SOLANA_NETWORK
-    });
-
+    // Process via Shyft
     const signature = await getShyftInstance().txnRelayer.sign({
       encodedTransaction: transaction,
       network: getShyftNetwork(process.env.SOLANA_NETWORK),
@@ -368,92 +346,46 @@ exports.processTransaction = async (req, res) => {
         "confirmed"
       );
 
-      if (order_id !== undefined) {
-        const payload = {
-          order_id: order_id,
-          tx_hash: signature
-        };
-        
-        logEscrowOperation("processTransaction:savingTransaction", {
-          order_id,
-          signature,
-          payload
-        });
-
-        const affectedRows = await models.transactions.create(payload);
-        logEscrowOperation("processTransaction:transactionSaved", {
-          order_id,
-          transaction_id: affectedRows?.id
-        });
-      }
+      // Save transaction
+      const txRecord = await models.transactions.create({
+        order_id: order_id,
+        tx_hash: signature
+      });
 
       logEscrowOperation("processTransaction:success", {
         order_id,
-        signature
+        signature,
+        transaction_id: txRecord.id
       });
+
       return successResponse(res, Messages.success, signature);
-    } else {
-      logEscrowError("processTransaction:signatureFailure", new Error("Failed to get signature"), {
-        order_id
-      });
-      return errorResponse(res, httpCodes.serverError, Messages.systemError);
     }
+
+    throw new Error("Failed to get signature");
+
   } catch (error) {
-    // Enhanced error logging with transaction decode attempt
     const errorContext = {
       order_id,
       user_id: req.user?.dataValues?.id,
       transaction_decode: await decodeTransaction(transaction)
     };
 
-    if (order) {
-      errorContext.order_status = order.dataValues.status;
-      errorContext.seller_id = order.dataValues.seller_id;
-      errorContext.buyer_id = order.dataValues.buyer_id;
-      errorContext.token_amount = order.dataValues.token_amount;
-    }
-
-    if (list) {
-      errorContext.list_id = list.dataValues.id;
-      errorContext.escrow_type = list.dataValues.escrow_type;
-    }
-
     logEscrowError("processTransaction:error", error, errorContext);
 
-    const errorMessage = error.message || error.toString();
-    
-    if (errorMessage.startsWith("{") && errorMessage.endsWith("}")) {
+    // Handle program errors
+    if (error.message?.startsWith("{") && error.message?.endsWith("}")) {
       try {
-        const parsedError = JSON.parse(errorMessage);
-        if (
-          parsedError.InstructionError &&
-          Array.isArray(parsedError.InstructionError)
-        ) {
-          const [index, instructionError] = parsedError.InstructionError;
-          if (instructionError.Custom !== undefined) {
-            const message = idl.errors[instructionError.Custom];
-            
-            // Enhanced instruction error logging
-            logEscrowError("processTransaction:instructionError", new Error(message.msg), {
-              order_id,
-              error_code: instructionError.Custom,
-              instruction_index: index,
-              instruction_details: errorContext.transaction_decode?.instructions?.[index],
-              accounts_at_error: errorContext.transaction_decode?.accountKeys
-            });
-            
-            return errorResponse(res, httpCodes.serverError, message);
-          }
+        const parsedError = JSON.parse(error.message);
+        if (parsedError.InstructionError?.[1]?.Custom !== undefined) {
+          const errorCode = parsedError.InstructionError[1].Custom;
+          const programError = idl.errors.find(e => e.code === errorCode);
+          return errorResponse(res, httpCodes.serverError, programError?.msg || "Unknown program error");
         }
       } catch (parseError) {
-        logEscrowError("processTransaction:parseError", parseError, {
-          order_id,
-          original_error: errorMessage,
-          transaction_decode: errorContext.transaction_decode
-        });
+        logEscrowError("processTransaction:parseError", parseError, errorContext);
       }
     }
-    
-    return errorResponse(res, httpCodes.serverError, errorMessage);
+
+    return errorResponse(res, httpCodes.serverError, error.message || Messages.systemError);
   }
 };

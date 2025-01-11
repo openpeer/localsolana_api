@@ -6,7 +6,8 @@
     "logs/*",
     "logs/**/*",
     "public/*",
-    "diff.txt"
+    "diff.txt",
+    "dist"
   ],
   "watch": [
     "controllers/",
@@ -16,7 +17,8 @@
     "services/",
     "crons/",
     "middleware/",
-    "server.js"
+    "server.ts"
   ],
-  "ext": "js,json,env"
+  "ext": "js,ts,json,env",
+  "exec": "ts-node ./server.ts"
 }
