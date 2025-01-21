@@ -336,12 +336,23 @@ exports.createOrder = async function (req, res) {
     console.log("Seller's payment method:", sellerPaymentMethod?.dataValues);
 
     let bankID = payment_method.bank_id;
+    
+    // Payment Method Logic:
+    // 1. For SellList orders:
+    //    - List owner is the seller
+    //    - Order creator (buyer) provides their payment details
+    //    - We use payment_method.values from the request
+    // 2. For BuyList orders:
+    //    - List owner is the buyer who specified their payment requirements
+    //    - Order creator (seller) needs the buyer's payment details
+    //    - We copy values from the buyer's ListPaymentMethod
     let paymentMethodData = {
       user_id: user.dataValues.id,
       bank_id: bankID,
       type: 'OrderPaymentMethod',
-      // Copy the seller's payment method values
-      values: sellerPaymentMethod?.dataValues?.values || {}
+      values: list.type == "BuyList" ? 
+        sellerPaymentMethod?.dataValues?.values || {} : 
+        payment_method.values || {}
     };
 
     const paymentMethod = await models.payment_methods.create(paymentMethodData);
