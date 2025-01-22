@@ -411,30 +411,31 @@ exports.updateOrder = async (req, res, io) => {
   const { status } = req.body;
   let updatedOrder; 
   try {
+    // First check if order exists
+    const existingOrder = await models.Order.findByPk(id);
+    if (!existingOrder) {
+      return errorResponse(res, httpCodes.badReq, 'Order not found');
+    }
+    
     const [affectedRows, [order]] = await models.Order.update(
       { status: status },
       {
         where: { id: id },
-        returning: true // If you want to get the updated instance(s)
+        returning: true
       }
     );
     updatedOrder = order;
+    
     if (affectedRows === 0) { 
-      console.log('No rows updated.');
       return errorResponse(res, httpCodes.serverError, 'There is an error while updating Order');
     } else {
-      console.log('Update successful.');
-      console.log(updatedOrder);
-      
-      // Emit events to the channels for buyer and seller
-      //if (updatedOrder.buyer_id) {
-        const buyerChannel = `OrdersChannel_${updatedOrder.id}_${updatedOrder.buyer_id}`;
-        const sellerChannel = `OrdersChannel_${updatedOrder.id}_${updatedOrder.seller_id}`; 
+      const buyerChannel = `OrdersChannel_${updatedOrder.id}_${updatedOrder.buyer_id}`;
+      const sellerChannel = `OrdersChannel_${updatedOrder.id}_${updatedOrder.seller_id}`;
 
-        console.log(buyerChannel);
-        const updatedOrderDetails = await models.Order.findByPk(order.dataValues.id);
-        io.to(buyerChannel).emit('orderUpdate', await fetchedOrderLoop(updatedOrderDetails));
-        io.to(sellerChannel).emit('orderUpdate', await fetchedOrderLoop(updatedOrderDetails));
+      console.log(buyerChannel);
+      const updatedOrderDetails = await models.Order.findByPk(order.dataValues.id);
+      io.to(buyerChannel).emit('orderUpdate', await fetchedOrderLoop(updatedOrderDetails));
+      io.to(sellerChannel).emit('orderUpdate', await fetchedOrderLoop(updatedOrderDetails));
 
       return successResponse(res, Messages.orderUpdated, []);
     }
