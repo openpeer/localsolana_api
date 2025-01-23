@@ -52,4 +52,5 @@ module.exports = {
     orderCanceled: 'Order cannot be canceled',
     notAuthorized: "You're not authorized to access this order",
     missingData: 'Some data was missing in request',
+    transactionTimeout: 'Transaction submitted but confirmation timed out. Please check the transaction status using the signature.',
 };

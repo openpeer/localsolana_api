@@ -363,35 +363,54 @@ exports.processTransaction = async (req, res) => {
         signature
       });
 
-      await getShyftInstance().connection.confirmTransaction(
-        signature,
-        "confirmed"
-      );
-
-      if (order_id !== undefined) {
-        const payload = {
-          order_id: order_id,
-          tx_hash: signature
-        };
-        
-        logEscrowOperation("processTransaction:savingTransaction", {
-          order_id,
+      try {
+        await getShyftInstance().connection.confirmTransaction(
           signature,
-          payload
-        });
+          "confirmed"
+        );
 
-        const affectedRows = await models.transactions.create(payload);
-        logEscrowOperation("processTransaction:transactionSaved", {
+        if (order_id !== undefined) {
+          const payload = {
+            order_id: order_id,
+            tx_hash: signature
+          };
+          
+          logEscrowOperation("processTransaction:savingTransaction", {
+            order_id,
+            signature,
+            payload
+          });
+
+          const affectedRows = await models.transactions.create(payload);
+          logEscrowOperation("processTransaction:transactionSaved", {
+            order_id,
+            transaction_id: affectedRows?.id
+          });
+        }
+
+        logEscrowOperation("processTransaction:success", {
           order_id,
-          transaction_id: affectedRows?.id
+          signature
         });
+        return successResponse(res, Messages.success, signature);
+      } catch (confirmError) {
+        // Handle timeout errors specifically
+        if (confirmError.message && confirmError.message.includes("was not confirmed")) {
+          logEscrowError("processTransaction:timeoutError", confirmError, {
+            order_id,
+            signature,
+            message: "Transaction submitted but confirmation timed out. Please check the transaction status manually."
+          });
+          
+          return errorResponse(res, httpCodes.serverError, Messages.transactionTimeout, {
+            signature: signature,
+            order_id: order_id,
+            details: "The transaction was submitted to the network but confirmation timed out. This does not mean the transaction failed. Please check the transaction status using the signature."
+          });
+        }
+        
+        throw confirmError; // Re-throw other confirmation errors
       }
-
-      logEscrowOperation("processTransaction:success", {
-        order_id,
-        signature
-      });
-      return successResponse(res, Messages.success, signature);
     } else {
       logEscrowError("processTransaction:signatureFailure", new Error("Failed to get signature"), {
         order_id
