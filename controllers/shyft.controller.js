@@ -9,6 +9,7 @@ const Messages = require("../utils/messages");
 const { logEscrowOperation, logEscrowError } = require("../utils/logger");
 const { PublicKey, Message, Transaction } = require("@solana/web3.js");
 const bs58 = require("bs58");
+const ShyftLogger = require('../utils/shyft-logger');
 
 async function validateAndLogRawTransaction(transaction) {
   try {
@@ -215,6 +216,10 @@ async function decodeTransaction(encodedTransaction) {
 
 async function getAccountInfo(connection, pubkey) {
   try {
+    ShyftLogger.logRPC('getAccountInfo', {
+      pubkey,
+      purpose: 'Fetching account information for transaction validation'
+    });
     const accountInfo = await connection.getAccountInfo(new PublicKey(pubkey));
     
     // Enhanced account info logging
@@ -332,7 +337,13 @@ exports.processTransaction = async (req, res) => {
       decoded: decodedTx
     });
 
-    // Get and log account info for all accounts in transaction
+    // Log RPC calls for account info
+    ShyftLogger.logRPC('Batch getAccountInfo', {
+      order_id,
+      numberOfAccounts: decodedTx.accountKeys.length,
+      purpose: 'Pre-signing account validation'
+    });
+
     const connection = getShyftInstance().connection;
     const accountInfoPromises = decodedTx.accountKeys.map(key => 
       getAccountInfo(connection, key)
@@ -352,15 +363,24 @@ exports.processTransaction = async (req, res) => {
       network: process.env.SOLANA_NETWORK
     });
 
+    // Log API call for transaction signing
+    ShyftLogger.logAPI('Transaction Signing', {
+      order_id,
+      network: process.env.SOLANA_NETWORK,
+      purpose: 'Sign and relay transaction'
+    });
+
     const signature = await getShyftInstance().txnRelayer.sign({
       encodedTransaction: transaction,
       network: getShyftNetwork(process.env.SOLANA_NETWORK),
     });
 
     if (signature) {
-      logEscrowOperation("processTransaction:confirming", {
+      // Log RPC call for confirmation
+      ShyftLogger.logRPC('Transaction Confirmation', {
         order_id,
-        signature
+        signature,
+        purpose: 'Confirm transaction execution'
       });
 
       try {
