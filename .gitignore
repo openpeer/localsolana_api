@@ -5,3 +5,4 @@ auth_token.txt
 # Logs
 logs/
 *.log
+.cursorrules
