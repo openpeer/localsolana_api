@@ -43,10 +43,10 @@ const executeAutomaticOrderCancellationTask = async () => {
   }
 };
 
-// Run every 5 minutes
-cron.schedule('*/5 * * * *', async () => {
-  console.log(chalk.bgBlue.white.bold('⏰ ORDER CLEANUP START'));
-  await executeAutomaticOrderCancellationTask();
-});
+// // Run every 5 minutes
+// cron.schedule('*/5 * * * *', async () => {
+//   console.log(chalk.bgBlue.white.bold('⏰ ORDER CLEANUP START'));
+//   await executeAutomaticOrderCancellationTask();
+// });
 
-console.log(chalk.bgGreen.black.bold('✅ ORDER CLEANUP CRON SCHEDULED (*/5)'));
+// console.log(chalk.bgGreen.black.bold('✅ ORDER CLEANUP CRON SCHEDULED (*/5)'));
